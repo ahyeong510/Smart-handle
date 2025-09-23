@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.smart_handle"
+    namespace = "com.example.bike"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.smart_handle"
+        applicationId = "com.example.bike"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

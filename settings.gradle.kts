@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "SMART-HANDLE"
+rootProject.name = "Bike"
 include(":app")
  

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="20dp"
+    android:background="#FFFFFF">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <!-- 진동 거리 임계값 -->
+        <TextView
+            android:id="@+id/distanceText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="진동 거리 임계값: 0m"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:layout_marginBottom="10dp" />
+
+        <SeekBar
+            android:id="@+id/distanceSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="10"
+            android:progress="5" />
+
+        <!-- 진동 강도 -->
+        <TextView
+            android:id="@+id/intensityText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="진동 강도: 0%"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="10dp" />
+
+        <SeekBar
+            android:id="@+id/intensitySeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="70" />
+
+        <!-- 안전 주의사항 -->
+        <LinearLayout
+            android:orientation="vertical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#FFF9E6"
+            android:padding="12dp"
+            android:layout_marginTop="25dp"
+            android:layout_marginBottom="10dp"
+            android:backgroundTintMode="src_in"
+            android:elevation="2dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="⚠️  안전 주의사항"
+                android:textColor="#C37A00"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="- 주행 중에는 스마트폰 화면을 보지 마세요.\n- 햅틱 피드백만 의존하지 말고 주변을 확인하세요.\n- 처음 사용 시 안전한 장소에서 테스트하세요."
+                android:textSize="14sp"
+                android:textColor="#333333" />
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

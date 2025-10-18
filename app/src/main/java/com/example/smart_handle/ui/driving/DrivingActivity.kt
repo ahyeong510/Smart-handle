@@ -34,6 +34,7 @@ class DrivingActivity : AppCompatActivity() {
 
         stopBtn.setOnClickListener {
             Toast.makeText(this, "🛑 주행을 종료합니다.", Toast.LENGTH_SHORT).show()
+            finish() // 메인탭(MainActivity)로 돌아감
         }
 
         // ✅ 지도 대신 임시 안내 문구 표시

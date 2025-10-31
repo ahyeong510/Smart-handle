@@ -1,15 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- ✅ 필수 권한 선언 -->
+    <!-- ✅ 위치 권한 (BLE 스캔용) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- ✅ 인터넷 (지도, API 통신용) -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- ✅ Android 12 이상용 블루투스 권한 -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
 
     <application
         android:allowBackup="true"
@@ -19,12 +23,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SmartHandle">
 
-        <!-- ✅ Mapbox 액세스 토큰 (pk. 로 시작하는 Public Key) -->
+        <!-- ✅ Mapbox 액세스 토큰 -->
         <meta-data
             android:name="MAPBOX_ACCESS_TOKEN"
             android:value="@string/mapbox_access_token" />
 
-        <!-- ✅ 앱 실행 시 제일 먼저 뜨는 화면 -->
+        <!-- ✅ 앱 시작 화면 -->
         <activity
             android:name=".ui.start.StartActivity"
             android:exported="true"
@@ -47,12 +51,12 @@
             android:exported="false"
             android:theme="@style/Theme.SmartHandle" />
 
-        <!-- ✅ 주행 지도 화면 (DrivingActivity) -->
+        <!-- ✅ 주행 지도 화면 -->
         <activity
             android:name=".ui.driving.DrivingActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.SmartHandle" />
-    </application>
 
+    </application>
 </manifest>

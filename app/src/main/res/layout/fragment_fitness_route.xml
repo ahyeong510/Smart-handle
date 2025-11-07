@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="20dp"
+    android:background="#FAFAFA">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp"
+        android:background="#F6F7FA"
+        android:elevation="2dp"
+        android:clipToOutline="true"
+        android:outlineProvider="background">
+
+        <!-- 제목 -->
+        <TextView
+            android:text="목표 거리 (km)"
+            android:textColor="#111"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <!-- 입력창 -->
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:background="#FFFFFF"
+            android:padding="10dp"
+            android:radius="12dp"
+            android:elevation="1dp">
+
+            <TextView
+                android:text="📏"
+                android:textSize="16sp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp" />
+
+            <EditText
+                android:id="@+id/etDistance"
+                android:hint="목표 거리를 입력하세요"
+                android:textSize="14sp"
+                android:inputType="number"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@null"
+                android:padding="0dp" />
+        </LinearLayout>
+
+        <!-- 안내 문구 -->
+        <TextView
+            android:text="💡 현재 위치에서 목표 거리만큼의 순환 경로를 생성합니다"
+            android:textColor="#555"
+            android:textSize="13sp"
+            android:layout_marginTop="12dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <!-- 버튼 -->
+        <Button
+            android:id="@+id/btnGenerateFitness"
+            android:text="경로 생성"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="20dp"
+            android:backgroundTint="#5B5B5B" />
+    </LinearLayout>
+</ScrollView>

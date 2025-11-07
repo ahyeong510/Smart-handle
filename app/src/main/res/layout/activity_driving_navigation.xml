@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F6F7FA">
+
+    <!-- 상단 정보바 -->
+    <LinearLayout
+        android:id="@+id/top_info_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:background="#DDDDDD">
+
+        <TextView
+            android:id="@+id/text_distance"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="거리: - km"
+            android:textColor="#000000"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/text_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="예상 시간: - 분"
+            android:textColor="#000000"
+            android:textSize="16sp"
+            android:layout_marginTop="5dp" />
+    </LinearLayout>
+
+    <!-- 방향 안내 화살표 -->
+    <ImageView
+        android:id="@+id/img_direction"
+        android:src="@drawable/ic_navigation"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:layout_centerInParent="true" />
+
+    <!-- 하단 버튼 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_alignParentBottom="true"
+        android:gravity="center"
+        android:padding="10dp">
+
+        <Button
+            android:id="@+id/btn_start_route"
+            android:layout_width="150dp"
+            android:layout_height="wrap_content"
+            android:text="경로 시작" />
+
+        <Button
+            android:id="@+id/btn_stop_route"
+            android:layout_width="150dp"
+            android:layout_height="wrap_content"
+            android:text="종료"
+            android:layout_marginStart="20dp"/>
+    </LinearLayout>
+
+</RelativeLayout>

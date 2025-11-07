@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/menu_navigation"
+        android:title="네비게이션"
+        android:icon="@drawable/ic_navigation" />
+    <item
+        android:id="@+id/menu_device"
+        android:title="디바이스"
+        android:icon="@drawable/ic_bluetooth" />
+    <item
+        android:id="@+id/menu_setting"
+        android:title="설정"
+        android:icon="@drawable/ic_setting" />
+</menu>

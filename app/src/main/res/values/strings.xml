@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ✅ 기본 앱 정보 -->
+    <string name="app_name">Smart Handle</string>
+
+    <!-- ✅ Mapbox 액세스 토큰 (아영님 토큰으로 교체) -->
+    <string name="mapbox_access_token">sk.eyJ1IjoiYXlvdW5nNTEiLCJhIjoiY21ndXluanRrMDA1ZzJzczc0ZXl4NXhpcCJ9.QLscDsgwsTRI-Xqk_LahQA</string>
+
+    <!-- ✅ Mapbox 스타일 URI -->
+    <string name="mapbox_style_mapbox_streets">mapbox://styles/mapbox/streets-v12</string>
+
+    <!-- ✅ 네비게이션 관련 -->
+    <string name="navigation_icon">Navigation Arrow</string>
+    <string name="start_route">경로 시작</string>
+    <string name="stop_route">종료</string>
+    <string name="distance_label">거리: 0.0 km</string>
+    <string name="time_label">예상 시간: 0분</string>
+
+    <!-- ✅ 탭 이름 -->
+    <string name="tab_find_route">길찾기</string>
+    <string name="tab_fitness">운동경로</string>
+    <string name="tab_tour">관광지 코스</string>
+    <string name="tab_settings">설정</string>
+
+    <!-- ✅ 권한 관련 -->
+    <string name="permission_location_title">위치 권한 필요</string>
+    <string name="permission_location_message">정확한 경로 안내를 위해 위치 권한이 필요합니다.</string>
+    <string name="permission_grant">권한 허용</string>
+    <string name="permission_deny">거부</string>
+
+    <!-- ✅ 기타 메시지 -->
+    <string name="toast_start">🚴 주행을 시작합니다.</string>
+    <string name="toast_stop">🛑 주행을 종료합니다.</string>
+
+    <!-- ✅ 추가: 지도 주행 관련 -->
+    <string name="driving_screen_title">주행 화면</string>
+    <string name="route_loading">경로를 불러오는 중...</string>
+</resources>

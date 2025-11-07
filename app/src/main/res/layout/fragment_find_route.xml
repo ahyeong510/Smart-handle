@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:focusableInTouchMode="true"
+    android:descendantFocusability="beforeDescendants"
+    android:fillViewport="true"
+    android:background="#FAFAFA">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:background="#F6F7FA">
+
+        <!-- 도착지 -->
+        <TextView
+            android:text="도착지"
+            android:textColor="#111111"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:layout_marginTop="8dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <EditText
+            android:id="@+id/etEnd"
+            android:hint="📍도착 위치를 입력하세요 (예: 서울시청)"
+            android:inputType="text"
+            android:background="#FFFFFF"
+            android:padding="10dp"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"/>
+
+        <!-- 지도에서 목적지 선택 -->
+        <Button
+            android:id="@+id/btn_select_destination"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="지도에서 목적지 선택"
+            android:layout_marginTop="16dp" />
+
+        <!-- 텍스트로 길안내 시작 -->
+        <Button
+            android:id="@+id/btn_start_navigation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="길안내 시작"
+            android:layout_marginTop="12dp" />
+
+        <!-- 🧪 테스트용 버튼 -->
+        <Button
+            android:id="@+id/btn_test_navigation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🧭 지도 길안내 테스트"
+            android:layout_marginTop="12dp"
+            android:backgroundTint="#2196F3"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"/>
+    </LinearLayout>
+</ScrollView>

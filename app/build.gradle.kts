@@ -52,9 +52,12 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+<<<<<<< HEAD
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.android.gms:play-services-location:21.0.1")
 
+=======
+>>>>>>> origin/main
 
     // ✅ Compose 관련
     implementation(libs.androidx.core.ktx)
@@ -70,9 +73,12 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.0")
     implementation("androidx.compose.material:material-icons-extended")
 
+<<<<<<< HEAD
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
 
+=======
+>>>>>>> origin/main
     // ✅ Mapbox SDK (11.5.0 안정버전)
 
     // ✅ 테스트 관련

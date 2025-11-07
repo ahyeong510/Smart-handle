@@ -23,7 +23,7 @@ import java.util.Locale
 
 class FindRouteFragment : Fragment() {
 
-    // 지도 화면에서 선택한 목적지 좌표를 받아오는 런처 (하나만 사용)
+    // 지도 화면에서 선택한 목적지 좌표를 받아오는 런처
     private val selectDestLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { res ->
@@ -49,16 +49,14 @@ class FindRouteFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        // 1) 레이아웃 inflate
         val view = inflater.inflate(R.layout.fragment_find_route, container, false)
 
-        // 2) 뷰 참조
         val etEnd = view.findViewById<EditText>(R.id.etEnd)
         val btnStart = view.findViewById<Button>(R.id.btn_start_navigation)
         val btnSelect = view.findViewById<Button>(R.id.btn_select_destination)
-        val btnTest = view.findViewById<Button>(R.id.btn_test_navigation) // 개발용 버튼(숨김 처리)
+        val btnTest = view.findViewById<Button>(R.id.btn_test_navigation)
 
-        // 3) 텍스트 입력 → 지오코딩 → MapsActivity로 전달
+        // 1️⃣ 목적지 검색 후 지도 이동
         btnStart.setOnClickListener {
             val query = etEnd.text.toString().trim()
             if (query.isEmpty()) {
@@ -95,13 +93,13 @@ class FindRouteFragment : Fragment() {
             }
         }
 
-        // 4) 지도에서 목적지 선택
+        // 2️⃣ 지도에서 목적지 직접 선택
         btnSelect.setOnClickListener {
             val intent = Intent(requireContext(), SelectLocationActivity::class.java)
             selectDestLauncher.launch(intent)
         }
 
-        // 5) 개발용 테스트 버튼은 숨김
+        // 3️⃣ 테스트 버튼은 숨김 처리
         btnTest?.visibility = View.GONE
 
         return view

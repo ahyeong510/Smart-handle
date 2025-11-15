@@ -1,6 +1,5 @@
 package com.example.smart_handle.maps
 
-import android.content.Intent
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
@@ -12,7 +11,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.smart_handle.R
-import com.example.smart_handle.ui.driving.DrivingActivity
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -84,11 +82,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         // 내 위치 표시
         m.isMyLocationEnabled = true
 
-        // 현재 위치 가져오기
         fused.lastLocation.addOnSuccessListener { loc ->
             currentLatLng = loc?.let { LatLng(it.latitude, it.longitude) }
-                ?: LatLng(37.5665, 126.9780)
+                ?: LatLng(37.5665, 126.9780) // fallback: 서울시청
 
+            // 현재 위치 마커
             currentLatLng?.let {
                 m.addMarker(
                     MarkerOptions()
@@ -98,6 +96,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 )
             }
 
+            // 목적지 마커
             destLatLng?.let {
                 m.addMarker(
                     MarkerOptions()
@@ -107,6 +106,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 )
             }
 
+            // 카메라 이동
             val focus = destLatLng ?: currentLatLng
             focus?.let { m.animateCamera(CameraUpdateFactory.newLatLngZoom(it, 14f)) }
 
@@ -121,11 +121,10 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    /** 🔥 경로 + 턴 이벤트 모두 요청 */
+    /** 🔥 경로만 표시 (주행 화면 자동 실행 없음!) */
     private fun fetchAndDrawRoute(origin: LatLng, dest: LatLng) {
         lifecycleScope.launch {
             try {
-                // Kakao Directions 요청
                 val route = MapDirectionHelper.getRoute(
                     startLat = origin.latitude,
                     startLng = origin.longitude,
@@ -136,25 +135,15 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 // Polyline 표시
                 if (route.points.size >= 2) {
                     drawPolyline(route.points)
-                }
-
-                // 턴 이벤트 있으면 DrivingActivity로 넘기기
-                if (route.turnEvents.isNotEmpty()) {
-                    val intent =
-                        Intent(this@MapsActivity, DrivingActivity::class.java).apply {
-                            putParcelableArrayListExtra(
-                                "turn_events",
-                                ArrayList(route.turnEvents)
-                            )
-                        }
-                    startActivity(intent)
                 } else {
                     Toast.makeText(
                         this@MapsActivity,
-                        "⚠ 턴 이벤트가 없습니다.",
+                        "경로를 찾을 수 없습니다.",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
+
+                // ❌ DrivingActivity 자동 실행 없음
 
             } catch (e: Exception) {
                 Toast.makeText(
@@ -169,11 +158,12 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun drawPolyline(points: List<LatLng>) {
         val m = googleMap ?: return
         routePolyline?.remove()
+
         routePolyline = m.addPolyline(
             PolylineOptions()
                 .addAll(points)
                 .width(10f)
-                .color(0xFF2196F3.toInt())
+                .color(0xFF2196F3.toInt()) // 파란색
         )
     }
 }

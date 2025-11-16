@@ -3,9 +3,24 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- 지도 Fragment -->
     <fragment
         android:id="@+id/map_fragment"
         android:name="com.google.android.gms.maps.SupportMapFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <!-- 하단 고정 주행 시작 버튼 -->
+    <Button
+        android:id="@+id/btnStartDrive"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:text="🚴 주행 시작"
+        android:textSize="18sp"
+        android:textColor="@android:color/white"
+        android:backgroundTint="@color/purple_500"
+        android:layout_gravity="bottom"
+        android:layout_margin="16dp"
+        android:elevation="8dp" />
+
 </FrameLayout>

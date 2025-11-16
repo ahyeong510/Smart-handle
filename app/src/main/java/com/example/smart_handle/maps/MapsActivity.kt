@@ -1,17 +1,19 @@
 package com.example.smart_handle.maps
 
 import android.Manifest
-import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
+import android.widget.Button
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
+import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.smart_handle.R
-import com.google.android.gms.location.FusedLocationProviderClient
+import com.example.smart_handle.maps.TurnEvent
+import com.example.smart_handle.ui.driving.DrivingActivity
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
@@ -27,33 +29,56 @@ import kotlinx.coroutines.launch
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private var googleMap: GoogleMap? = null
-    private lateinit var fused: FusedLocationProviderClient
+    private lateinit var fused: com.google.android.gms.location.FusedLocationProviderClient
 
     private var destLatLng: LatLng? = null
     private var currentLatLng: LatLng? = null
     private var routePolyline: Polyline? = null
 
-    private val permLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
-            enableMyLocationAndProceed()
-        }
+    // 🔥 경로의 턴 정보를 저장해서 버튼으로 전달
+    private var cachedTurnEvents: List<TurnEvent> = emptyList()
+
+    // 🔥 권한 요청 런처
+    private val permLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { perms ->
+        val granted = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        if (granted) enableMyLocationAndProceed()
+        else Toast.makeText(this, "위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_maps)
 
-        // 목적지 좌표 받기
-        val dLat = intent.getDoubleExtra("extra_dest_lat", Double.NaN)
-        val dLng = intent.getDoubleExtra("extra_dest_lng", Double.NaN)
-        if (!dLat.isNaN() && !dLng.isNaN()) {
-            destLatLng = LatLng(dLat, dLng)
-        }
-
         fused = LocationServices.getFusedLocationProviderClient(this)
 
-        val mapFragment =
-            supportFragmentManager.findFragmentById(R.id.map_fragment) as SupportMapFragment
+        // 🔹 목적지 좌표 받기
+        val lat = intent.getDoubleExtra("extra_dest_lat", Double.NaN)
+        val lng = intent.getDoubleExtra("extra_dest_lng", Double.NaN)
+        if (!lat.isNaN() && !lng.isNaN()) {
+            destLatLng = LatLng(lat, lng)
+        }
+
+        // 🔹 지도 준비
+        val mapFragment = supportFragmentManager.findFragmentById(R.id.map_fragment)
+                as SupportMapFragment
         mapFragment.getMapAsync(this)
+
+        // 🔥 주행 시작 버튼 → DrivingActivity 이동
+        findViewById<Button>(R.id.btnStartDrive).setOnClickListener {
+            if (cachedTurnEvents.isEmpty()) {
+                Toast.makeText(this, "경로가 아직 준비되지 않았습니다.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val intent = Intent(this, DrivingActivity::class.java)
+            intent.putParcelableArrayListExtra(
+                "turn_events",
+                ArrayList(cachedTurnEvents)
+            )
+            startActivity(intent)
+        }
     }
 
     override fun onMapReady(map: GoogleMap) {
@@ -61,109 +86,95 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         enableMyLocationAndProceed()
     }
 
-    @SuppressLint("MissingPermission")
+    // 🔥 내 위치 + 목적지 + 경로 로직 시작
     private fun enableMyLocationAndProceed() {
-        val m = googleMap ?: return
+        val map = googleMap ?: return
 
-        val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-        val coarse =
-            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+        val fine = Manifest.permission.ACCESS_FINE_LOCATION
+        val coarse = Manifest.permission.ACCESS_COARSE_LOCATION
 
-        if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) {
-            permLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
+        if (ActivityCompat.checkSelfPermission(this, fine) != PackageManager.PERMISSION_GRANTED ||
+            ActivityCompat.checkSelfPermission(this, coarse) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permLauncher.launch(arrayOf(fine, coarse))
             return
         }
 
-        // 내 위치 표시
-        m.isMyLocationEnabled = true
+        map.isMyLocationEnabled = true
 
-        fused.lastLocation.addOnSuccessListener { loc ->
-            currentLatLng = loc?.let { LatLng(it.latitude, it.longitude) }
-                ?: LatLng(37.5665, 126.9780) // fallback: 서울시청
-
-            // 현재 위치 마커
-            currentLatLng?.let {
-                m.addMarker(
-                    MarkerOptions()
-                        .position(it)
-                        .title("현재 위치")
-                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
-                )
+        fused.lastLocation.addOnSuccessListener { loc: Location? ->
+            if (loc == null) {
+                currentLatLng = LatLng(37.5665, 126.9780) // 서울시청 기본값
+            } else {
+                currentLatLng = LatLng(loc.latitude, loc.longitude)
             }
 
-            // 목적지 마커
-            destLatLng?.let {
-                m.addMarker(
-                    MarkerOptions()
-                        .position(it)
-                        .title("목적지")
-                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
-                )
-            }
-
-            // 카메라 이동
-            val focus = destLatLng ?: currentLatLng
-            focus?.let { m.animateCamera(CameraUpdateFactory.newLatLngZoom(it, 14f)) }
+            currentLatLng?.let { drawCurrentLocation(it) }
+            destLatLng?.let { drawDestination(it) }
 
             val origin = currentLatLng
             val dest = destLatLng
-
             if (origin != null && dest != null) {
                 fetchAndDrawRoute(origin, dest)
-            } else {
-                Toast.makeText(this, "출발/도착 좌표가 없습니다.", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    /** 🔥 경로만 표시 (주행 화면 자동 실행 없음!) */
+    // 🔹 현재 위치 마커 표시
+    private fun drawCurrentLocation(pos: LatLng) {
+        googleMap?.addMarker(
+            MarkerOptions()
+                .position(pos)
+                .title("현재 위치")
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
+        )
+        googleMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(pos, 14f))
+    }
+
+    // 🔹 목적지 마커 표시
+    private fun drawDestination(dest: LatLng) {
+        googleMap?.addMarker(
+            MarkerOptions()
+                .position(dest)
+                .title("목적지")
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+        )
+        googleMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(dest, 14f))
+    }
+
+    // 🔥 경로 + 턴 이벤트 추출
     private fun fetchAndDrawRoute(origin: LatLng, dest: LatLng) {
         lifecycleScope.launch {
-            try {
-                val route = MapDirectionHelper.getRoute(
-                    startLat = origin.latitude,
-                    startLng = origin.longitude,
-                    endLat = dest.latitude,
-                    endLng = dest.longitude
-                )
+            val route = MapDirectionHelper.getRoute(
+                startLat = origin.latitude,
+                startLng = origin.longitude,
+                endLat = dest.latitude,
+                endLng = dest.longitude
+            )
 
-                // Polyline 표시
-                if (route.points.size >= 2) {
-                    drawPolyline(route.points)
-                } else {
-                    Toast.makeText(
-                        this@MapsActivity,
-                        "경로를 찾을 수 없습니다.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+            drawPolyline(route.points)
 
-                // ❌ DrivingActivity 자동 실행 없음
+            // 턴 이벤트 저장
+            cachedTurnEvents = route.turnEvents
 
-            } catch (e: Exception) {
-                Toast.makeText(
-                    this@MapsActivity,
-                    "경로 요청 실패: ${e.message}",
-                    Toast.LENGTH_SHORT
-                ).show()
+            if (cachedTurnEvents.isEmpty()) {
+                Toast.makeText(this@MapsActivity, "턴 이벤트가 없습니다.", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
+    // 🔹 Polyline(경로선) 그리기
     private fun drawPolyline(points: List<LatLng>) {
-        val m = googleMap ?: return
+        val map = googleMap ?: return
         routePolyline?.remove()
 
-        routePolyline = m.addPolyline(
-            PolylineOptions()
-                .addAll(points)
-                .width(10f)
-                .color(0xFF2196F3.toInt()) // 파란색
-        )
+        if (points.isEmpty()) return
+
+        val options = PolylineOptions()
+            .addAll(points)
+            .width(10f)
+            .color(0xFF2196F3.toInt())
+
+        routePolyline = map.addPolyline(options)
     }
 }

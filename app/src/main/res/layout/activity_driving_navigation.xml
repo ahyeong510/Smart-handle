@@ -5,62 +5,61 @@
     android:layout_height="match_parent"
     android:background="#F6F7FA">
 
-    <!-- 상단 정보바 -->
+    <!-- ✨ 단순 턴 안내 카드 -->
     <LinearLayout
-        android:id="@+id/top_info_bar"
+        android:id="@+id/turnCard"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="20dp"
-        android:background="#DDDDDD">
-
-        <TextView
-            android:id="@+id/text_distance"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="거리: - km"
-            android:textColor="#000000"
-            android:textSize="16sp" />
-
-        <TextView
-            android:id="@+id/text_time"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="예상 시간: - 분"
-            android:textColor="#000000"
-            android:textSize="16sp"
-            android:layout_marginTop="5dp" />
-    </LinearLayout>
-
-    <!-- 방향 안내 화살표 -->
-    <ImageView
-        android:id="@+id/img_direction"
-        android:src="@drawable/ic_navigation"
-        android:layout_width="100dp"
-        android:layout_height="100dp"
-        android:layout_centerInParent="true" />
-
-    <!-- 하단 버튼 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="90dp"
+        android:layout_margin="20dp"
+        android:padding="16dp"
         android:orientation="horizontal"
-        android:layout_alignParentBottom="true"
-        android:gravity="center"
-        android:padding="10dp">
+        android:background="#FFFFFF"
+        android:elevation="6dp"
+        android:layout_alignParentTop="true">
 
-        <Button
-            android:id="@+id/btn_start_route"
-            android:layout_width="150dp"
-            android:layout_height="wrap_content"
-            android:text="경로 시작" />
+        <!-- 방향 아이콘 -->
+        <ImageView
+            android:id="@+id/turnIcon"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_launcher_foreground" />
 
-        <Button
-            android:id="@+id/btn_stop_route"
-            android:layout_width="150dp"
-            android:layout_height="wrap_content"
-            android:text="종료"
-            android:layout_marginStart="20dp"/>
+        <!-- 거리 + 턴 종류 -->
+        <LinearLayout
+            android:orientation="vertical"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:layout_marginStart="16dp">
+
+            <TextView
+                android:id="@+id/turnDistance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="100m 후"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="#000000" />
+
+            <TextView
+                android:id="@+id/turnTypeText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="좌회전"
+                android:textSize="18sp"
+                android:textColor="#555555" />
+        </LinearLayout>
+
     </LinearLayout>
+
+    <!-- 🔽 종료 버튼 -->
+    <Button
+        android:id="@+id/btn_stop_route"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:text="종료"
+        android:textSize="20sp"
+        android:layout_margin="16dp"
+        android:layout_alignParentBottom="true" />
 
 </RelativeLayout>

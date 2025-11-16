@@ -7,38 +7,35 @@ import android.location.Location
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import com.example.smart_handle.R
-import com.example.smart_handle.maps.MapDirectionHelper
 import com.example.smart_handle.maps.TurnEvent
 import com.example.smart_handle.maps.TurnType
 import com.example.smart_handle.ui.ble.BluetoothManager
 import com.google.android.gms.location.*
-import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
-import kotlinx.coroutines.launch
 
 class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
 
     private lateinit var fused: FusedLocationProviderClient
-    private lateinit var directionImg: ImageView
-    private lateinit var distanceText: TextView
-    private lateinit var timeText: TextView
+
+    private lateinit var turnCard: View
+    private lateinit var turnIcon: ImageView
+    private lateinit var turnDistance: TextView
+    private lateinit var turnTypeText: TextView
 
     private var ble: BluetoothManager? = null
     private var readyToWrite = false
 
-    /** 턴 이벤트 리스트 */
     private var turnEvents: MutableList<TurnEvent> = mutableListOf()
     private var nextTurnIndex = 0
 
-    /** 반복 진동용 */
     private var repeatHandler: Handler? = null
     private var repeatRunnable: Runnable? = null
     private var isRepeating = false
@@ -47,27 +44,31 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driving_navigation)
 
-        directionImg = findViewById(R.id.img_direction)
-        distanceText = findViewById(R.id.text_distance)
-        timeText = findViewById(R.id.text_time)
+        // 🚗 UI 연결
+        turnCard = findViewById(R.id.turnCard)
+        turnIcon = findViewById(R.id.turnIcon)
+        turnDistance = findViewById(R.id.turnDistance)
+        turnTypeText = findViewById(R.id.turnTypeText)
+
+        // 🔥 종료 버튼 → 이전 화면으로 돌아가기 (가장 안정적)
+        findViewById<Button>(R.id.btn_stop_route).setOnClickListener {
+            finish()
+        }
 
         ble = BluetoothManager(this).also { it.listener = this }
         fused = LocationServices.getFusedLocationProviderClient(this)
 
-        // 1) turnEvents 받아오기
-        val tempList = intent.getParcelableArrayListExtra<TurnEvent>("turn_events")
-        if (tempList != null) {
-            turnEvents.addAll(tempList)
+        // turnEvents 받아오기
+        intent.getParcelableArrayListExtra<TurnEvent>("turn_events")?.let {
+            turnEvents.addAll(it)
         }
 
-        // 2) 위치 권한 확인 → 추적 시작
         checkLocationPermission()
     }
 
     // --------------------------------------------
-    // GPS 위치 권한
+    // 위치 권한 처리
     // --------------------------------------------
-
     private fun checkLocationPermission() {
         val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
         if (fine != PackageManager.PERMISSION_GRANTED) {
@@ -83,12 +84,10 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
         }
 
     // --------------------------------------------
-    // GPS 추적 시작
+    // GPS 위치 추적
     // --------------------------------------------
-
     @SuppressLint("MissingPermission")
     private fun startLocationTracking() {
-
         val req = LocationRequest.Builder(700)
             .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
             .build()
@@ -100,42 +99,53 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
         override fun onLocationResult(result: LocationResult) {
             val loc = result.lastLocation ?: return
             val cur = LatLng(loc.latitude, loc.longitude)
-
             checkTurnEvent(cur)
         }
     }
 
     // --------------------------------------------
-    // 턴 이벤트 처리
+    // 턴 안내 처리
     // --------------------------------------------
-
     private fun checkTurnEvent(current: LatLng) {
-        if (nextTurnIndex >= turnEvents.size) return
+
+        // 모든 턴 끝 → 카드 숨김
+        if (nextTurnIndex >= turnEvents.size) {
+            turnCard.visibility = View.GONE
+            return
+        }
 
         val target = turnEvents[nextTurnIndex]
         val dist = distance(current, target.location)
 
-        distanceText.text = "다음 턴까지: %.1f m".format(dist)
+        // UI 업데이트
+        turnCard.visibility = View.VISIBLE
+        turnDistance.text = "${dist.toInt()}m 후"
 
-        // --------------------------
-        // 🔵 50m 알림
-        // --------------------------
+        when (target.type) {
+            TurnType.LEFT -> {
+                turnIcon.setImageResource(R.drawable.ic_turn_left)
+                turnTypeText.text = "좌회전"
+            }
+            TurnType.RIGHT -> {
+                turnIcon.setImageResource(R.drawable.ic_turn_right)
+                turnTypeText.text = "우회전"
+            }
+            else -> { /* STRAIGHT 안 씀 */ }
+        }
+
+        // 50m 진동
         if (!target.trigger50 && dist < 50 && dist >= 25) {
             sendTurnVibration(target.type)
             target.trigger50 = true
         }
 
-        // --------------------------
-        // 🟡 25m 알림
-        // --------------------------
+        // 25m 진동
         if (!target.trigger25 && dist < 25 && dist >= 10) {
             sendTurnVibration(target.type)
             target.trigger25 = true
         }
 
-        // --------------------------
-        // 🔴 10m 반복 진동
-        // --------------------------
+        // 10m 반복 진동
         if (dist < 10 && dist >= 3) {
             if (!isRepeating) {
                 startRepeatingVibration(target.type)
@@ -143,9 +153,7 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
             }
         }
 
-        // --------------------------
-        // ✔ 턴 통과
-        // --------------------------
+        // 턴 완료
         if (dist < 3) {
             stopRepeatingVibration()
             nextTurnIndex++
@@ -153,20 +161,19 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
     }
 
     private fun distance(a: LatLng, b: LatLng): Float {
-        val res = FloatArray(1)
-        Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, res)
-        return res[0]
+        val result = FloatArray(1)
+        Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, result)
+        return result[0]
     }
 
     // --------------------------------------------
-    // BLE 진동 함수
+    // 진동 처리
     // --------------------------------------------
-
     private fun sendTurnVibration(type: TurnType) {
         when (type) {
-            TurnType.LEFT -> ble?.sendText("L")   // 왼쪽 모터
-            TurnType.RIGHT -> ble?.sendText("R")  // 오른쪽 모터
-            TurnType.STRAIGHT -> return
+            TurnType.LEFT -> ble?.sendText("L")
+            TurnType.RIGHT -> ble?.sendText("R")
+            else -> {}
         }
     }
 
@@ -189,7 +196,6 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
     // --------------------------------------------
     // BLE Listener
     // --------------------------------------------
-
     override fun onReadyToWrite(ready: Boolean) {
         readyToWrite = ready
     }

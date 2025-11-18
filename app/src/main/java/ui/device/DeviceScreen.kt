@@ -11,6 +11,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.CenterAlignedTopAppBar
 import com.example.bike.ui.device.DeviceScreen
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.collectAsState
+import com.example.smart_handle.NavigationViewModel
 
 // --- 임시 데이터 모델 (BLE 연동 전) ---
 data class DeviceUi(
@@ -38,6 +41,10 @@ fun DeviceScreen(
     onLeftLed: (Boolean) -> Unit = {},
     onRightLed: (Boolean) -> Unit = {}
 ) {
+    // ⭐⭐⭐ 여기에 삽입 ⭐⭐⭐
+    val navViewModel: NavigationViewModel = viewModel()
+    val navigationState by navViewModel.navigation.collectAsState()
+
     var vib by remember { mutableFloatStateOf(0.75f) }
     var leftLed by remember { mutableStateOf(true) }
     var rightLed by remember { mutableStateOf(true) }
@@ -63,7 +70,23 @@ fun DeviceScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+        // ⭐⭐⭐ FastAPI 호출 테스트 버튼 추가 ⭐⭐⭐
+        item {
+            Button(onClick = {
+                navViewModel.getRoute("강남역", "홍대입구")
+            }) {
+                Text("FastAPI 경로 요청 보내기")
+            }
 
+            val data = navigationState
+            Spacer(Modifier.height(8.dp))
+            if (data != null) {
+                Text("메시지: ${data.message}")
+                Text("턴 목록: ${data.turns.joinToString()}")
+            } else {
+                Text("응답 없음 또는 에러")
+            }
+        }
             // 연결된 디바이스 카드
             item {
                 ConnectedDeviceCard(

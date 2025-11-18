@@ -30,9 +30,7 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
     private lateinit var turnDistance: TextView
     private lateinit var turnTypeText: TextView
 
-    private var ble: BluetoothManager? = null
     private var readyToWrite = false
-
     private var turnEvents: MutableList<TurnEvent> = mutableListOf()
     private var nextTurnIndex = 0
 
@@ -44,21 +42,20 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driving_navigation)
 
-        // 🚗 UI 연결
         turnCard = findViewById(R.id.turnCard)
         turnIcon = findViewById(R.id.turnIcon)
         turnDistance = findViewById(R.id.turnDistance)
         turnTypeText = findViewById(R.id.turnTypeText)
 
-        // 🔥 종료 버튼 → 이전 화면으로 돌아가기 (가장 안정적)
         findViewById<Button>(R.id.btn_stop_route).setOnClickListener {
             finish()
         }
 
-        ble = BluetoothManager(this).also { it.listener = this }
+        // 🔥 DrivingActivity 가 BLE listener가 됨
+        BluetoothManager.listener = this
+
         fused = LocationServices.getFusedLocationProviderClient(this)
 
-        // turnEvents 받아오기
         intent.getParcelableArrayListExtra<TurnEvent>("turn_events")?.let {
             turnEvents.addAll(it)
         }
@@ -66,9 +63,6 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
         checkLocationPermission()
     }
 
-    // --------------------------------------------
-    // 위치 권한 처리
-    // --------------------------------------------
     private fun checkLocationPermission() {
         val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
         if (fine != PackageManager.PERMISSION_GRANTED) {
@@ -83,9 +77,6 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
             startLocationTracking()
         }
 
-    // --------------------------------------------
-    // GPS 위치 추적
-    // --------------------------------------------
     @SuppressLint("MissingPermission")
     private fun startLocationTracking() {
         val req = LocationRequest.Builder(700)
@@ -98,17 +89,11 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val loc = result.lastLocation ?: return
-            val cur = LatLng(loc.latitude, loc.longitude)
-            checkTurnEvent(cur)
+            checkTurnEvent(LatLng(loc.latitude, loc.longitude))
         }
     }
 
-    // --------------------------------------------
-    // 턴 안내 처리
-    // --------------------------------------------
     private fun checkTurnEvent(current: LatLng) {
-
-        // 모든 턴 끝 → 카드 숨김
         if (nextTurnIndex >= turnEvents.size) {
             turnCard.visibility = View.GONE
             return
@@ -117,7 +102,6 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
         val target = turnEvents[nextTurnIndex]
         val dist = distance(current, target.location)
 
-        // UI 업데이트
         turnCard.visibility = View.VISIBLE
         turnDistance.text = "${dist.toInt()}m 후"
 
@@ -130,76 +114,71 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
                 turnIcon.setImageResource(R.drawable.ic_turn_right)
                 turnTypeText.text = "우회전"
             }
-            else -> { /* STRAIGHT 안 씀 */ }
+            else -> {}
         }
 
-        // 50m 진동
         if (!target.trigger50 && dist < 50 && dist >= 25) {
-            sendTurnVibration(target.type)
+            sendVibration(target.type)
             target.trigger50 = true
         }
 
-        // 25m 진동
         if (!target.trigger25 && dist < 25 && dist >= 10) {
-            sendTurnVibration(target.type)
+            sendVibration(target.type)
             target.trigger25 = true
         }
 
-        // 10m 반복 진동
         if (dist < 10 && dist >= 3) {
             if (!isRepeating) {
-                startRepeatingVibration(target.type)
+                startRepeating(target.type)
                 isRepeating = true
             }
         }
 
-        // 턴 완료
         if (dist < 3) {
-            stopRepeatingVibration()
+            stopRepeating()
             nextTurnIndex++
         }
     }
 
     private fun distance(a: LatLng, b: LatLng): Float {
-        val result = FloatArray(1)
-        Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, result)
-        return result[0]
+        val arr = FloatArray(1)
+        Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, arr)
+        return arr[0]
     }
 
-    // --------------------------------------------
-    // 진동 처리
-    // --------------------------------------------
-    private fun sendTurnVibration(type: TurnType) {
+    private fun sendVibration(type: TurnType) {
+        if (!readyToWrite) return
+
         when (type) {
-            TurnType.LEFT -> ble?.sendText("L")
-            TurnType.RIGHT -> ble?.sendText("R")
+            TurnType.LEFT -> BluetoothManager.sendText("L")
+            TurnType.RIGHT -> BluetoothManager.sendText("R")
             else -> {}
         }
     }
 
-    private fun startRepeatingVibration(type: TurnType) {
+    private fun startRepeating(type: TurnType) {
         repeatHandler = Handler(Looper.getMainLooper())
         repeatRunnable = object : Runnable {
             override fun run() {
-                sendTurnVibration(type)
+                sendVibration(type)
                 repeatHandler?.postDelayed(this, 2000)
             }
         }
         repeatHandler?.post(repeatRunnable!!)
     }
 
-    private fun stopRepeatingVibration() {
+    private fun stopRepeating() {
         repeatRunnable?.let { repeatHandler?.removeCallbacks(it) }
         isRepeating = false
     }
 
-    // --------------------------------------------
-    // BLE Listener
-    // --------------------------------------------
     override fun onReadyToWrite(ready: Boolean) {
         readyToWrite = ready
     }
 
-    override fun onStateChanged(connected: Boolean, deviceName: String?) {}
-    override fun onLog(msg: String) {}
+    override fun onDestroy() {
+        super.onDestroy()
+        BluetoothManager.listener = null
+        stopRepeating()
+    }
 }

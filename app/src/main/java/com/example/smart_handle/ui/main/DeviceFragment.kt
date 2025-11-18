@@ -23,18 +23,16 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
     private lateinit var btnLeft: Button
     private lateinit var btnRight: Button
 
-    private var ble: BluetoothManager? = null
-    private var isConnected = false
     private var readyToWrite = false
+    private var isConnected = false
     private var connectedName: String? = null
 
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        val granted = result.values.all { it }
-        if (granted) startConnectFlow()
-        else setStatus("⚠️ 권한 거부됨")
-    }
+    private val permLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            val granted = result.values.all { it }
+            if (granted) startConnectFlow()
+            else setStatus("⚠️ 권한 거부됨")
+        }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -51,93 +49,86 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         btnLeft = view.findViewById(R.id.btnLeft)
         btnRight = view.findViewById(R.id.btnRight)
 
-        ble = BluetoothManager(requireContext()).also { it.listener = this }
+        // 🔥 이 화면이 BLE 상태를 받도록 연결
+        BluetoothManager.listener = this
 
         btnConnect.setOnClickListener {
             if (isConnected) {
-                ble?.disconnect()
-                setUiDisconnected()
+                setStatus("연결 유지됨 (주행에서 사용)")
             } else {
-                ensurePermissionsAndConnect()
+                ensurePermissions()
             }
         }
 
         btnLeft.setOnClickListener {
-            if (readyToWrite) {
-                ble?.sendText("L")
-                setStatus("📤 L 전송됨")
-            } else setStatus("⚠️ 연결/서비스 준비 필요")
+            if (readyToWrite) BluetoothManager.sendText("L")
+            setStatus("📤 L 전송됨")
         }
 
         btnRight.setOnClickListener {
-            if (readyToWrite) {
-                ble?.sendText("R")
-                setStatus("📤 R 전송됨")
-            } else setStatus("⚠️ 연결/서비스 준비 필요")
+            if (readyToWrite) BluetoothManager.sendText("R")
+            setStatus("📤 R 전송됨")
         }
-
-        setUiDisconnected()
     }
 
-    private fun ensurePermissionsAndConnect() {
+    private fun ensurePermissions() {
         val needs = mutableListOf<String>()
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
-                needs += Manifest.permission.BLUETOOTH_SCAN
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
-                needs += Manifest.permission.BLUETOOTH_CONNECT
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_SCAN)
+                != PackageManager.PERMISSION_GRANTED
+            ) needs += Manifest.permission.BLUETOOTH_SCAN
+
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_CONNECT)
+                != PackageManager.PERMISSION_GRANTED
+            ) needs += Manifest.permission.BLUETOOTH_CONNECT
         } else {
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-                needs += Manifest.permission.ACCESS_FINE_LOCATION
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED
+            ) needs += Manifest.permission.ACCESS_FINE_LOCATION
         }
 
-        if (needs.isNotEmpty()) permissionLauncher.launch(needs.toTypedArray())
-        else startConnectFlow()
+        if (needs.isEmpty()) startConnectFlow()
+        else permLauncher.launch(needs.toTypedArray())
     }
 
     private fun startConnectFlow() {
         setStatus("🔍 기기 검색 중…")
-        ble?.startScanAndConnect()
-    }
-
-    // ===== BluetoothManager.Listener =====
-    override fun onLog(msg: String) {
-        // 필요 시 로그를 누적 표시하거나 Logcat에 출력 가능
+        BluetoothManager.startScanAndConnect()
     }
 
     override fun onStateChanged(connected: Boolean, deviceName: String?) {
         isConnected = connected
         connectedName = deviceName
-        if (connected) {
-            requireActivity().runOnUiThread {
-                btnConnect.text = "연결 해제"
-                val name = deviceName ?: "ESP32"
-                textStatus.text = "$name\n연결됨 ✅"
+
+        requireActivity().runOnUiThread {
+            if (connected) {
+                btnConnect.text = "연결됨"
+                textStatus.text = "${deviceName ?: "기기"}\n연결됨"
+            } else {
+                btnConnect.text = "기기 연결"
+                textStatus.text = "연결 끊김"
             }
-        } else {
-            requireActivity().runOnUiThread { setUiDisconnected() }
         }
     }
 
     override fun onReadyToWrite(ready: Boolean) {
         readyToWrite = ready
-        if (ready) setStatus("📡 BLE 서비스 준비 완료")
+        if (ready) setStatus("📡 전송 준비됨")
     }
 
-    private fun setUiDisconnected() {
-        btnConnect.text = "기기 연결"
-        readyToWrite = false
-        setStatus("기기 연결 안됨 ✖")
+    override fun onLog(msg: String) {
+        // 필요하면 로그 출력
     }
 
     private fun setStatus(msg: String) {
-        val name = if (isConnected) (connectedName ?: "ESP32") + "\n" else ""
+        val name = if (isConnected) "${connectedName ?: "기기"}\n" else ""
         textStatus.text = name + msg
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        ble?.disconnect()
-        ble = null
+        // 🔥 BLE를 끊으면 안 됨
+        BluetoothManager.listener = null
     }
 }

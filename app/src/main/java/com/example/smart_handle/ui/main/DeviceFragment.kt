@@ -23,8 +23,8 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
     private lateinit var btnLeft: Button
     private lateinit var btnRight: Button
 
-    private var readyToWrite = false
     private var isConnected = false
+    private var readyToWrite = false
     private var connectedName: String? = null
 
     private val permLauncher =
@@ -49,28 +49,49 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         btnLeft = view.findViewById(R.id.btnLeft)
         btnRight = view.findViewById(R.id.btnRight)
 
-        // 🔥 이 화면이 BLE 상태를 받도록 연결
+        // 🔥 BLE listener 연결 (필수)
         BluetoothManager.listener = this
 
+        // 🔥 만약 이미 연결된 상태라면 화면이 바로 반영되도록
+        restoreUiState()
+
         btnConnect.setOnClickListener {
-            if (isConnected) {
-                setStatus("연결 유지됨 (주행에서 사용)")
-            } else {
+            if (!isConnected) {
                 ensurePermissions()
+            } else {
+                // 연결 된 상태에서 눌러도 BLE를 끊지 않음
+                setStatus("이미 연결됨")
             }
         }
 
         btnLeft.setOnClickListener {
-            if (readyToWrite) BluetoothManager.sendText("L")
-            setStatus("📤 L 전송됨")
+            if (readyToWrite) {
+                BluetoothManager.sendText("L")
+                setStatus("📤 L 전송됨")
+            } else {
+                setStatus("⚠️ 아직 전송 준비 안됨")
+            }
         }
 
         btnRight.setOnClickListener {
-            if (readyToWrite) BluetoothManager.sendText("R")
-            setStatus("📤 R 전송됨")
+            if (readyToWrite) {
+                BluetoothManager.sendText("R")
+                setStatus("📤 R 전송됨")
+            } else {
+                setStatus("⚠️ 아직 전송 준비 안됨")
+            }
         }
     }
 
+    /** 🔥 이미 BLE가 연결된 상태라면 UI 회복 */
+    private fun restoreUiState() {
+        // BLEManager 내부 상태를 그대로 반영해야 하는데
+        // BluetoothManager는 상태 변수 공개 X → listener로만 처리됨
+        // 따라서 여기서는 “연결 여부는 다음 콜백에서 자동 반영되는 구조”
+        setStatus("기기 연결 안됨 ✖")
+    }
+
+    /** 🔥 권한 체크 */
     private fun ensurePermissions() {
         val needs = mutableListOf<String>()
 
@@ -92,10 +113,15 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         else permLauncher.launch(needs.toTypedArray())
     }
 
+    /** 🔥 스캔 + 연결 시작 */
     private fun startConnectFlow() {
         setStatus("🔍 기기 검색 중…")
         BluetoothManager.startScanAndConnect()
     }
+
+    // ======================================================
+    // BLE Listener 콜백
+    // ======================================================
 
     override fun onStateChanged(connected: Boolean, deviceName: String?) {
         isConnected = connected
@@ -118,17 +144,17 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
     }
 
     override fun onLog(msg: String) {
-        // 필요하면 로그 출력
+        // 필요하면 로그 표시 가능
     }
 
     private fun setStatus(msg: String) {
-        val name = if (isConnected) "${connectedName ?: "기기"}\n" else ""
-        textStatus.text = name + msg
+        val prefix = if (isConnected) "${connectedName ?: "기기"}\n" else ""
+        textStatus.text = prefix + msg
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        // 🔥 BLE를 끊으면 안 됨
+        // 🔥 BLE 끊지 않음 (싱글톤 유지)
         BluetoothManager.listener = null
     }
 }

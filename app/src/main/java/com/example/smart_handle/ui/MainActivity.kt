@@ -16,19 +16,22 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 🔥 BLE 싱글톤 초기화 (필수!)
-        BluetoothManager.init(this)
-
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // 앱 첫 화면 → 네비게이션 탭
-        replaceFragment(NavigationFragment())
-        binding.topTitle.text = "Bike Navi"
+        // 🔥 BLE 싱글톤 초기화
+        BluetoothManager.init(this)
+
+        // ✅ 액티비티가 "처음" 만들어질 때만 기본 프래그먼트 넣기
+        if (savedInstanceState == null) {
+            replaceFragment(NavigationFragment())
+            binding.bottomNavigation.selectedItemId = R.id.menu_navigation
+            binding.topTitle.text = "Bike Navi"
+        }
 
         // 하단 탭 선택 리스너
-        binding.bottomNavigation.setOnItemSelectedListener {
-            when (it.itemId) {
+        binding.bottomNavigation.setOnItemSelectedListener { item ->
+            when (item.itemId) {
 
                 R.id.menu_navigation -> {
                     replaceFragment(NavigationFragment())

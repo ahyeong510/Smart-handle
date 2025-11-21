@@ -21,7 +21,8 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SmartHandle">
+        android:theme="@style/Theme.SmartHandle"
+        android:enableOnBackInvokedCallback="true">
 
         <!-- ✅ Google 지도 API 키 -->
         <meta-data

@@ -127,7 +127,12 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         isConnected = connected
         connectedName = deviceName
 
-        requireActivity().runOnUiThread {
+        // 🔐 프래그먼트/뷰가 살아 있을 때만 UI 건드리기
+        if (!isAdded || view == null) return
+
+        activity?.runOnUiThread {
+            if (!isAdded || view == null) return@runOnUiThread
+
             if (connected) {
                 btnConnect.text = "연결됨"
                 textStatus.text = "${deviceName ?: "기기"}\n연결됨"
@@ -138,13 +143,26 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         }
     }
 
+
     override fun onReadyToWrite(ready: Boolean) {
         readyToWrite = ready
-        if (ready) setStatus("📡 전송 준비됨")
+
+        if (!isAdded || view == null) return
+
+        activity?.runOnUiThread {
+            if (!isAdded || view == null) return@runOnUiThread
+            if (ready) setStatus("📡 전송 준비됨")
+        }
     }
 
     override fun onLog(msg: String) {
-        // 필요하면 로그 표시 가능
+        if (!isAdded || view == null) return
+
+        activity?.runOnUiThread {
+            if (!isAdded || view == null) return@runOnUiThread
+            // 필요하면 textStatus 나 로그 텍스트뷰에 추가
+            // textLog.append(msg + "\n") 이런 식
+        }
     }
 
     private fun setStatus(msg: String) {

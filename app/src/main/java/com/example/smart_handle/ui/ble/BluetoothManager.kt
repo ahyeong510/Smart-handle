@@ -2,14 +2,21 @@ package com.example.smart_handle.ui.ble
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.bluetooth.*
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.bluetooth.BluetoothManager as SystemBluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import java.util.UUID
+
 
 /**
  * 🔥 앱 전체에서 하나만 존재하는 BLE 싱글톤 매니저
@@ -41,12 +48,16 @@ object BluetoothManager {
     // ======================
     // BLE 헤더
     // ======================
-    private val bluetoothManager by lazy {
-        ctx.getSystemService(BluetoothManager::class.java)
+// ======================
+// BLE 헤더
+// ======================
+    private val bluetoothManager: SystemBluetoothManager? by lazy {
+        ctx.getSystemService(SystemBluetoothManager::class.java)
     }
 
     private val adapter: BluetoothAdapter?
         get() = bluetoothManager?.adapter
+
 
     private var gatt: BluetoothGatt? = null
     private var writeChar: BluetoothGattCharacteristic? = null

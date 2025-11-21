@@ -52,7 +52,8 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
         }
 
         // 🔥 DrivingActivity 가 BLE listener가 됨
-        BluetoothManager.listener = this
+        BluetoothManager.attachListener(this)
+
 
         fused = LocationServices.getFusedLocationProviderClient(this)
 
@@ -178,7 +179,7 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
 
     override fun onDestroy() {
         super.onDestroy()
-        BluetoothManager.listener = null
+        BluetoothManager.attachListener(null)
         stopRepeating()
     }
 }

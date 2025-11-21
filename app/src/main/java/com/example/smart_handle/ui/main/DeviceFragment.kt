@@ -49,11 +49,15 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         btnLeft = view.findViewById(R.id.btnLeft)
         btnRight = view.findViewById(R.id.btnRight)
 
-        // 🔥 BLE listener 연결 (필수)
-        BluetoothManager.listener = this
+        // 처음 들어왔을 때 기본 상태
+        btnLeft.isEnabled = false
+        btnRight.isEnabled = false
+        setStatus("기기 연결 안됨 ✖")
 
-        // 🔥 만약 이미 연결된 상태라면 화면이 바로 반영되도록
-        restoreUiState()
+        // 🔥 BLE listener 연결 (싱글톤 상태를 바로 UI에 반영)
+        //  - BluetoothManager.attachListener 안에서
+        //    현재 연결 상태 / readyToWrite 상태를 즉시 한 번 호출해 줌
+        BluetoothManager.attachListener(this)
 
         btnConnect.setOnClickListener {
             if (!isConnected) {
@@ -81,14 +85,6 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
                 setStatus("⚠️ 아직 전송 준비 안됨")
             }
         }
-    }
-
-    /** 🔥 이미 BLE가 연결된 상태라면 UI 회복 */
-    private fun restoreUiState() {
-        // BLEManager 내부 상태를 그대로 반영해야 하는데
-        // BluetoothManager는 상태 변수 공개 X → listener로만 처리됨
-        // 따라서 여기서는 “연결 여부는 다음 콜백에서 자동 반영되는 구조”
-        setStatus("기기 연결 안됨 ✖")
     }
 
     /** 🔥 권한 체크 */
@@ -143,7 +139,6 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         }
     }
 
-
     override fun onReadyToWrite(ready: Boolean) {
         readyToWrite = ready
 
@@ -151,7 +146,15 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
 
         activity?.runOnUiThread {
             if (!isAdded || view == null) return@runOnUiThread
-            if (ready) setStatus("📡 전송 준비됨")
+
+            btnLeft.isEnabled = ready
+            btnRight.isEnabled = ready
+
+            if (ready) {
+                setStatus("📡 전송 준비됨")
+            } else {
+                setStatus("전송 불가")
+            }
         }
     }
 
@@ -160,8 +163,8 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
 
         activity?.runOnUiThread {
             if (!isAdded || view == null) return@runOnUiThread
-            // 필요하면 textStatus 나 로그 텍스트뷰에 추가
-            // textLog.append(msg + "\n") 이런 식
+            // 필요하면 textStatus 나 별도 로그뷰에 추가해서 디버깅
+            // textStatus.append("\n$msg")
         }
     }
 
@@ -172,7 +175,7 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        // 🔥 BLE 끊지 않음 (싱글톤 유지)
-        BluetoothManager.listener = null
+        // 🔥 연결은 유지하고, 화면만 listener 해제
+        BluetoothManager.attachListener(null)
     }
 }

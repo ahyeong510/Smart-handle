@@ -20,11 +20,20 @@ import com.example.smart_handle.maps.TurnType
 import com.example.smart_handle.ui.ble.BluetoothManager
 import com.google.android.gms.location.*
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.SupportMapFragment
 
-class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
+
+class DrivingActivity : AppCompatActivity(),
+    BluetoothManager.Listener,
+    OnMapReadyCallback {
 
     private lateinit var fused: FusedLocationProviderClient
 
+    private var googleMap: GoogleMap? = null
+    private var currentLatLng: LatLng? = null
     private lateinit var turnCard: View
     private lateinit var turnIcon: ImageView
     private lateinit var turnDistance: TextView
@@ -41,6 +50,10 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driving_navigation)
+
+        val mapFragment = supportFragmentManager
+            .findFragmentById(R.id.drive_map) as SupportMapFragment
+        mapFragment.getMapAsync(this)
 
         turnCard = findViewById(R.id.turnCard)
         turnIcon = findViewById(R.id.turnIcon)
@@ -80,6 +93,9 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
 
     @SuppressLint("MissingPermission")
     private fun startLocationTracking() {
+
+        googleMap?.isMyLocationEnabled = true
+
         val req = LocationRequest.Builder(700)
             .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
             .build()
@@ -90,9 +106,20 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val loc = result.lastLocation ?: return
-            checkTurnEvent(LatLng(loc.latitude, loc.longitude))
+
+            val here = LatLng(loc.latitude, loc.longitude)
+            currentLatLng = here
+
+            // 1) 기존 턴 이벤트 체크
+            checkTurnEvent(here)
+
+            // 2)  네비처럼 카메라를 현재 위치로 이동
+            googleMap?.animateCamera(
+                CameraUpdateFactory.newLatLngZoom(here, 17f)   // 17 정도면 네비 느낌
+            )
         }
     }
+
 
     private fun checkTurnEvent(current: LatLng) {
         if (nextTurnIndex >= turnEvents.size) {
@@ -182,4 +209,18 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
         BluetoothManager.attachListener(null)
         stopRepeating()
     }
+
+    override fun onMapReady(map: GoogleMap) {
+        googleMap = map
+
+        // 위치 권한이 이미 있다면 파란 점(내 위치) 켜기
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            googleMap?.isMyLocationEnabled = true
+        }
+    }
+
 }

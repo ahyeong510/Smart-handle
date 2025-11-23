@@ -52,6 +52,14 @@
 
     </LinearLayout>
 
+    <fragment
+        android:id="@+id/drive_map"
+        android:name="com.google.android.gms.maps.SupportMapFragment"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/turnCard"
+        android:layout_above="@id/btn_stop_route" />
+
     <!-- 🔽 종료 버튼 -->
     <Button
         android:id="@+id/btn_stop_route"

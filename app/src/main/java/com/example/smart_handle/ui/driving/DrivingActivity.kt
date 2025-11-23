@@ -26,6 +26,7 @@ import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
+import kotlin.math.roundToInt
 
 
 
@@ -145,6 +146,7 @@ class DrivingActivity : AppCompatActivity(),
         val target = turnEvents[nextTurnIndex]
         val dist = distance(current, target.location)
 
+        val displayDist = dist.roundToInt()
         turnCard.visibility = View.VISIBLE
         turnDistance.text = "${dist.toInt()}m 후"
 
@@ -217,6 +219,7 @@ class DrivingActivity : AppCompatActivity(),
 
     override fun onReadyToWrite(ready: Boolean) {
         readyToWrite = ready
+        android.util.Log.d("DrivingActivity_BLE", "readyToWrite = $ready")
     }
 
     override fun onDestroy() {
@@ -251,6 +254,11 @@ class DrivingActivity : AppCompatActivity(),
                 CameraUpdateFactory.newLatLngZoom(routePoints.first(), 16f)
             )
         }
+    }
+
+    //로그캣 확인용 코드-ble 연결 확인
+    override fun onLog(msg: String) {
+        android.util.Log.d("DrivingActivity_BLE", msg)
     }
 
 

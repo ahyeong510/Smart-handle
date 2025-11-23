@@ -34,6 +34,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private var destLatLng: LatLng? = null
     private var currentLatLng: LatLng? = null
     private var routePolyline: Polyline? = null
+    private var cachedRoutePoints: List<LatLng> = emptyList()
+
 
     // 🔥 경로의 턴 정보를 저장해서 버튼으로 전달
     private var cachedTurnEvents: List<TurnEvent> = emptyList()
@@ -77,6 +79,13 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 "turn_events",
                 ArrayList(cachedTurnEvents)
             )
+
+            // 🚗 전체 경로 좌표(폴리라인)도 같이 전달
+            intent.putParcelableArrayListExtra(
+                "route_points",
+                ArrayList(cachedRoutePoints)
+            )
+
             startActivity(intent)
         }
     }
@@ -155,6 +164,10 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             drawPolyline(route.points)
 
             // 턴 이벤트 저장
+            cachedTurnEvents = route.turnEvents
+
+            // 🔹 전체 경로 좌표 & 턴 이벤트 저장
+            cachedRoutePoints = route.points
             cachedTurnEvents = route.turnEvents
 
             if (cachedTurnEvents.isEmpty()) {

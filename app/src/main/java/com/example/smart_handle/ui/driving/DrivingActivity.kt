@@ -24,6 +24,9 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.Polyline
+import com.google.android.gms.maps.model.PolylineOptions
+
 
 
 class DrivingActivity : AppCompatActivity(),
@@ -74,8 +77,20 @@ class DrivingActivity : AppCompatActivity(),
             turnEvents.addAll(it)
         }
 
+        intent.getParcelableArrayListExtra<LatLng>("route_points")?.let {
+            routePoints.addAll(it)
+        }
+
+
         checkLocationPermission()
     }
+
+    // 경로 전체 좌표
+    private val routePoints = mutableListOf<LatLng>()
+
+    // 지도에 그려질 폴리라인 객체
+    private var routePolyline: Polyline? = null
+
 
     private fun checkLocationPermission() {
         val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -221,6 +236,22 @@ class DrivingActivity : AppCompatActivity(),
         ) {
             googleMap?.isMyLocationEnabled = true
         }
+
+        // 🚗 주행 경로 폴리라인 그리기
+        if (routePoints.isNotEmpty()) {
+            val polylineOptions = PolylineOptions()
+                .addAll(routePoints)
+                .width(10f)
+                .color(0xFF2196F3.toInt())   // MapsActivity와 동일 색상
+
+            routePolyline = googleMap?.addPolyline(polylineOptions)
+
+            // 처음 진입 시 카메라를 경로 시작 지점 근처로
+            googleMap?.moveCamera(
+                CameraUpdateFactory.newLatLngZoom(routePoints.first(), 16f)
+            )
+        }
     }
+
 
 }

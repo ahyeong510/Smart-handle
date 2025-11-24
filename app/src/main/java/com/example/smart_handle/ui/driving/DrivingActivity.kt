@@ -19,25 +19,22 @@ import com.example.smart_handle.maps.TurnEvent
 import com.example.smart_handle.maps.TurnType
 import com.example.smart_handle.ui.ble.BluetoothManager
 import com.google.android.gms.location.*
-import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
-import kotlin.math.roundToInt
-
-
 
 class DrivingActivity : AppCompatActivity(),
     BluetoothManager.Listener,
     OnMapReadyCallback {
 
     private lateinit var fused: FusedLocationProviderClient
-
     private var googleMap: GoogleMap? = null
     private var currentLatLng: LatLng? = null
+
     private lateinit var turnCard: View
     private lateinit var turnIcon: ImageView
     private lateinit var turnDistance: TextView
@@ -50,6 +47,10 @@ class DrivingActivity : AppCompatActivity(),
     private var repeatHandler: Handler? = null
     private var repeatRunnable: Runnable? = null
     private var isRepeating = false
+
+    private val routePoints = mutableListOf<LatLng>()
+    private var routePolyline: Polyline? = null
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,9 +69,8 @@ class DrivingActivity : AppCompatActivity(),
             finish()
         }
 
-        // 🔥 DrivingActivity 가 BLE listener가 됨
         BluetoothManager.attachListener(this)
-
+        BluetoothManager.startScanAndConnect()
 
         fused = LocationServices.getFusedLocationProviderClient(this)
 
@@ -82,16 +82,8 @@ class DrivingActivity : AppCompatActivity(),
             routePoints.addAll(it)
         }
 
-
         checkLocationPermission()
     }
-
-    // 경로 전체 좌표
-    private val routePoints = mutableListOf<LatLng>()
-
-    // 지도에 그려질 폴리라인 객체
-    private var routePolyline: Polyline? = null
-
 
     private fun checkLocationPermission() {
         val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -109,7 +101,6 @@ class DrivingActivity : AppCompatActivity(),
 
     @SuppressLint("MissingPermission")
     private fun startLocationTracking() {
-
         googleMap?.isMyLocationEnabled = true
 
         val req = LocationRequest.Builder(700)
@@ -126,17 +117,17 @@ class DrivingActivity : AppCompatActivity(),
             val here = LatLng(loc.latitude, loc.longitude)
             currentLatLng = here
 
-            // 1) 기존 턴 이벤트 체크
             checkTurnEvent(here)
 
-            // 2)  네비처럼 카메라를 현재 위치로 이동
             googleMap?.animateCamera(
-                CameraUpdateFactory.newLatLngZoom(here, 17f)   // 17 정도면 네비 느낌
+                CameraUpdateFactory.newLatLngZoom(here, 17f)
             )
         }
     }
 
-
+    // ================================
+    // ⭐ 최종: 거리 기반 진동 + 턴 필터링
+    // ================================
     private fun checkTurnEvent(current: LatLng) {
         if (nextTurnIndex >= turnEvents.size) {
             turnCard.visibility = View.GONE
@@ -144,9 +135,11 @@ class DrivingActivity : AppCompatActivity(),
         }
 
         val target = turnEvents[nextTurnIndex]
-        val dist = distance(current, target.location)
 
-        val displayDist = dist.roundToInt()
+        // 거리 계산 + 반경 보정 (6m 허용)
+        val rawDist = distance(current, target.location)
+        val dist = (rawDist - 6f).coerceAtLeast(0f)
+
         turnCard.visibility = View.VISIBLE
         turnDistance.text = "${dist.toInt()}m 후"
 
@@ -162,26 +155,35 @@ class DrivingActivity : AppCompatActivity(),
             else -> {}
         }
 
-        if (!target.trigger50 && dist < 50 && dist >= 25) {
-            sendVibration(target.type)
-            target.trigger50 = true
+        // 🛑 시작위치 근처 가짜 턴 제거
+        if (nextTurnIndex == 0 && dist < 20f) {
+            nextTurnIndex++
+            return
         }
 
-        if (!target.trigger25 && dist < 25 && dist >= 10) {
-            sendVibration(target.type)
-            target.trigger25 = true
+        // 100m 이상 → 진동 없음
+        if (dist > 100f) {
+            stopRepeating()
+            return
         }
 
-        if (dist < 10 && dist >= 3) {
-            if (!isRepeating) {
-                startRepeating(target.type)
-                isRepeating = true
-            }
+        // 100~50m → 4초 간격 진동
+        if (dist in 50f..100f) {
+            startRepeatingInterval(target.type, 4000)
+            return
         }
 
-        if (dist < 3) {
+        // 50~10m → 1.2초 간격 진동
+        if (dist in 10f..50f) {
+            startRepeatingInterval(target.type, 1200)
+            return
+        }
+
+        // 10m 이하 → 턴 도달 → 다음 턴
+        if (dist <= 10f) {
             stopRepeating()
             nextTurnIndex++
+            return
         }
     }
 
@@ -201,14 +203,18 @@ class DrivingActivity : AppCompatActivity(),
         }
     }
 
-    private fun startRepeating(type: TurnType) {
+    private fun startRepeatingInterval(type: TurnType, intervalMs: Long) {
+        if (isRepeating) return
+
         repeatHandler = Handler(Looper.getMainLooper())
         repeatRunnable = object : Runnable {
             override fun run() {
                 sendVibration(type)
-                repeatHandler?.postDelayed(this, 2000)
+                repeatHandler?.postDelayed(this, intervalMs)
             }
         }
+
+        isRepeating = true
         repeatHandler?.post(repeatRunnable!!)
     }
 
@@ -219,7 +225,6 @@ class DrivingActivity : AppCompatActivity(),
 
     override fun onReadyToWrite(ready: Boolean) {
         readyToWrite = ready
-        android.util.Log.d("DrivingActivity_BLE", "readyToWrite = $ready")
     }
 
     override fun onDestroy() {
@@ -231,7 +236,6 @@ class DrivingActivity : AppCompatActivity(),
     override fun onMapReady(map: GoogleMap) {
         googleMap = map
 
-        // 위치 권한이 이미 있다면 파란 점(내 위치) 켜기
         if (ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
@@ -240,26 +244,19 @@ class DrivingActivity : AppCompatActivity(),
             googleMap?.isMyLocationEnabled = true
         }
 
-        // 🚗 주행 경로 폴리라인 그리기
         if (routePoints.isNotEmpty()) {
             val polylineOptions = PolylineOptions()
                 .addAll(routePoints)
                 .width(10f)
-                .color(0xFF2196F3.toInt())   // MapsActivity와 동일 색상
+                .color(0xFF2196F3.toInt())
 
             routePolyline = googleMap?.addPolyline(polylineOptions)
 
-            // 처음 진입 시 카메라를 경로 시작 지점 근처로
             googleMap?.moveCamera(
                 CameraUpdateFactory.newLatLngZoom(routePoints.first(), 16f)
             )
         }
     }
 
-    //로그캣 확인용 코드-ble 연결 확인
-    override fun onLog(msg: String) {
-        android.util.Log.d("DrivingActivity_BLE", msg)
-    }
-
-
+    override fun onLog(msg: String) {}
 }

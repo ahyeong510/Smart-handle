@@ -25,7 +25,7 @@ class NavigationFragment : Fragment() {
         viewPager.adapter = adapter
 
         // ✅ EditText 포커스 방해 방지 (필수)
-        viewPager.isUserInputEnabled = true  // false 로 바꾸면 스와이프 완전히 막힘
+        viewPager.isUserInputEnabled = false  // false 로 바꾸면 스와이프 완전히 막힘
         viewPager.offscreenPageLimit = 3     // 모든 탭 미리 로드 (EditText 안정화)
 
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->

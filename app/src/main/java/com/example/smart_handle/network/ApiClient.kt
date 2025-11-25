@@ -5,14 +5,17 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 object ApiClient {
 
-    private const val BASE_URL = "http://10.0.2.2:8000/"
-    // 반드시 뒤에 / 붙여야 retrofit이 엔드포인트 해석함
+    private const val BASE_URL = "http://10.0.2.2:8000/"   // 에뮬레이터용 FastAPI 서버 주소
 
-    val api: SmartHandleApi by lazy {
+    private val retrofit: Retrofit by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
-            .create(SmartHandleApi::class.java)
+    }
+
+    // ⭐️ 이게 바로 service!
+    val service: SmartHandleApi by lazy {
+        retrofit.create(SmartHandleApi::class.java)
     }
 }

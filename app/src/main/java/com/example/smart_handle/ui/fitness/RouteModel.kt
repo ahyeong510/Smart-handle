@@ -10,6 +10,5 @@ data class RouteModel(
     val title: String,
     val distanceKm: Double,
     val timeMin: Int,
-    val level: Int,
     val path: List<LatLng>
 )

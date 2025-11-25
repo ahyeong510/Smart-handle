@@ -1,100 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="20dp"
-    android:background="#FAFAFA"
-    android:fillViewport="true">
+    android:orientation="vertical"
+    android:padding="16dp">
 
-    <LinearLayout
-        android:orientation="vertical"
-        android:layout_width="match_parent"
+    <!-- 목표 거리 selector -->
+    <TextView
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:padding="16dp"
-        android:background="#F6F7FA">
+        android:text="목표 거리 (km)"
+        android:textSize="16sp"
+        android:paddingBottom="4dp"/>
 
-        <!-- 제목 -->
-        <TextView
-            android:text="목표 거리 (km)"
-            android:textColor="#111"
-            android:textStyle="bold"
-            android:textSize="14sp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+    <NumberPicker
+        android:id="@+id/npDistance"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp" />
 
-        <!-- 입력창 -->
-        <LinearLayout
-            android:orientation="horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="8dp"
-            android:background="#FFFFFF"
-            android:padding="10dp">
+    <Button
+        android:id="@+id/btnGenerateRoute"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="경로 생성" />
 
-            <TextView
-                android:text="📏"
-                android:textSize="16sp"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp" />
+    <ProgressBar
+        android:id="@+id/progressBar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center"
+        android:visibility="gone"
+        android:padding="8dp"/>
 
-            <EditText
-                android:id="@+id/etDistance"
-                android:hint="목표 거리를 입력하세요"
-                android:textSize="14sp"
-                android:inputType="number"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="@null"
-                android:padding="0dp" />
-        </LinearLayout>
+    <TextView
+        android:id="@+id/tvResult"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="추천된 거리: 0 km"
+        android:textSize="15sp"
+        android:layout_marginTop="8dp"/>
 
-        <!-- 안내문구 -->
-        <TextView
-            android:text="💡 현재 위치에서 목표 거리만큼의 순환 경로를 생성합니다"
-            android:textColor="#555"
-            android:textSize="13sp"
-            android:layout_marginTop="12dp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <!-- 버튼 -->
-        <Button
-            android:id="@+id/btnGenerateRoute"
-            android:text="경로 생성"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="20dp"
-            android:backgroundTint="#5B5B5B" />
-
-        <!-- 로딩 -->
-        <ProgressBar
-            android:id="@+id/progressBar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:layout_gravity="center"
-            android:visibility="gone"
-            style="?android:attr/progressBarStyleLarge" />
-
-        <!-- 결과 -->
-        <TextView
-            android:id="@+id/tvResult"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textSize="14sp"
-            android:textColor="#333"
-            android:layout_marginTop="20dp" />
-
-        <!-- 추천 경로 리스트 -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recyclerFitness"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp" />
-
-    </LinearLayout>
-</ScrollView>
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerFitness"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
+</LinearLayout>

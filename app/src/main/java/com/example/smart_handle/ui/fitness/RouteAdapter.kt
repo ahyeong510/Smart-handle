@@ -70,11 +70,7 @@ class RouteAdapter(
             tvTitle.text = item.title
             tvDistance.text = "${item.distanceKm} km"
             tvTime.text = "${item.timeMin} 분"
-            tvLevel.text = when (item.level) {
-                in 0..10 -> "쉬움"
-                in 11..20 -> "보통"
-                else -> "어려움"
-            }
+
 
             // 선택된 카드 시각 효과 (배경색만 간단하게)
             val bgColor = if (isSelected) 0xFFE3F2FD.toInt() else 0xFFFFFFFF.toInt()

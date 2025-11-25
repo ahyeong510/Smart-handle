@@ -5,8 +5,8 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.example.smart_handle.databinding.ActivityDrivingFitnessBinding
 import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.PolylineOptions
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.PolylineOptions
 
 class FitnessDrivingActivity : AppCompatActivity() {
 
@@ -17,6 +17,7 @@ class FitnessDrivingActivity : AppCompatActivity() {
         binding = ActivityDrivingFitnessBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // 인텐트에서 경로 좌표 리스트 받기 (나중에 /route/{id} 결과를 여기로 넘길 예정)
         val coords = intent.getParcelableArrayListExtra<LatLng>("polyline") ?: return
 
         binding.mapView.onCreate(savedInstanceState)

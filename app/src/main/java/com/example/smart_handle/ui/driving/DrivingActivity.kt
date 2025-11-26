@@ -1,262 +1,314 @@
 package com.example.smart_handle.ui.driving
 
-import android.Manifest
 import android.annotation.SuppressLint
-import android.content.pm.PackageManager
-import android.location.Location
+import android.bluetooth.BluetoothAdapter
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.View
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import com.example.smart_handle.R
+import com.example.smart_handle.ui.ble.BluetoothManager
 import com.example.smart_handle.maps.TurnEvent
 import com.example.smart_handle.maps.TurnType
-import com.example.smart_handle.ui.ble.BluetoothManager
 import com.google.android.gms.location.*
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.OnMapReadyCallback
-import com.google.android.gms.maps.SupportMapFragment
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.Polyline
-import com.google.android.gms.maps.model.PolylineOptions
+import com.google.android.gms.maps.*
+import com.google.android.gms.maps.model.*
 
-class DrivingActivity : AppCompatActivity(),
-    BluetoothManager.Listener,
-    OnMapReadyCallback {
+class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener, OnMapReadyCallback {
 
-    private lateinit var fused: FusedLocationProviderClient
-    private var googleMap: GoogleMap? = null
-    private var currentLatLng: LatLng? = null
-
-    private lateinit var turnCard: View
-    private lateinit var turnIcon: ImageView
-    private lateinit var turnDistance: TextView
+    private lateinit var turnDistanceText: TextView
     private lateinit var turnTypeText: TextView
+    private lateinit var turnIcon: ImageView
+    private lateinit var stopButton: Button
+
+    private var mMap: GoogleMap? = null
 
     private var readyToWrite = false
-    private var turnEvents: MutableList<TurnEvent> = mutableListOf()
-    private var nextTurnIndex = 0
 
-    private var repeatHandler: Handler? = null
+    private lateinit var fusedLocation: FusedLocationProviderClient
+    private lateinit var locationCallback: LocationCallback
+
+    private val turnEvents = mutableListOf<TurnEvent>()
+    private var currentIndex = 0
+
+    private var routePoints: List<LatLng> = emptyList()
+    private var destLatLng: LatLng? = null
+
+    private var hasRightTurn = false
+
+    private val handler = Handler(Looper.getMainLooper())
     private var repeatRunnable: Runnable? = null
-    private var isRepeating = false
 
-    private val routePoints = mutableListOf<LatLng>()
-    private var routePolyline: Polyline? = null
+    private var arrivalVibrationStarted = false
+    private var arrivalNotified = false
+    private var enteredStraightMode = false
 
+    private var lastCameraUpdate = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driving_navigation)
 
-        val mapFragment = supportFragmentManager
-            .findFragmentById(R.id.drive_map) as SupportMapFragment
-        mapFragment.getMapAsync(this)
-
-        turnCard = findViewById(R.id.turnCard)
-        turnIcon = findViewById(R.id.turnIcon)
-        turnDistance = findViewById(R.id.turnDistance)
+        turnDistanceText = findViewById(R.id.turnDistance)
         turnTypeText = findViewById(R.id.turnTypeText)
+        turnIcon = findViewById(R.id.turnIcon)
+        stopButton = findViewById(R.id.btn_stop_route)
 
-        findViewById<Button>(R.id.btn_stop_route).setOnClickListener {
+        stopButton.setOnClickListener {
+            stopVibration()
             finish()
         }
 
-        BluetoothManager.attachListener(this)
-        BluetoothManager.startScanAndConnect()
+        fusedLocation = LocationServices.getFusedLocationProviderClient(this)
 
-        fused = LocationServices.getFusedLocationProviderClient(this)
+        intent.getParcelableArrayListExtra<TurnEvent>("turn_events")?.let { turnEvents.addAll(it) }
+        intent.getParcelableArrayListExtra<LatLng>("route_points")?.let { routePoints = it }
 
-        intent.getParcelableArrayListExtra<TurnEvent>("turn_events")?.let {
-            turnEvents.addAll(it)
-        }
+        destLatLng = routePoints.lastOrNull()
+        hasRightTurn = turnEvents.any { it.type == TurnType.RIGHT }
 
-        intent.getParcelableArrayListExtra<LatLng>("route_points")?.let {
-            routePoints.addAll(it)
-        }
+        val mapFragment = supportFragmentManager.findFragmentById(R.id.drive_map)
+                as SupportMapFragment
+        mapFragment.getMapAsync(this)
 
-        checkLocationPermission()
+        setupBackPress()
+        setupBluetooth()
+        startLocationUpdates()
     }
-
-    private fun checkLocationPermission() {
-        val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-        if (fine != PackageManager.PERMISSION_GRANTED) {
-            permLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
-        } else {
-            startLocationTracking()
-        }
-    }
-
-    private val permLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            startLocationTracking()
-        }
 
     @SuppressLint("MissingPermission")
-    private fun startLocationTracking() {
-        googleMap?.isMyLocationEnabled = true
+    override fun onMapReady(googleMap: GoogleMap) {
+        mMap = googleMap
 
-        val req = LocationRequest.Builder(700)
-            .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
-            .build()
+        mMap?.isMyLocationEnabled = true   // 🔥 내 위치 아이콘 표시
 
-        fused.requestLocationUpdates(req, locationCallback, Looper.getMainLooper())
-    }
+        if (routePoints.isNotEmpty()) {
+            val poly = PolylineOptions()
+                .addAll(routePoints)
+                .color(Color.BLUE)
+                .width(12f)
 
-    private val locationCallback = object : LocationCallback() {
-        override fun onLocationResult(result: LocationResult) {
-            val loc = result.lastLocation ?: return
-
-            val here = LatLng(loc.latitude, loc.longitude)
-            currentLatLng = here
-
-            checkTurnEvent(here)
-
-            googleMap?.animateCamera(
-                CameraUpdateFactory.newLatLngZoom(here, 17f)
-            )
+            mMap?.addPolyline(poly)
+            mMap?.moveCamera(CameraUpdateFactory.newLatLngZoom(routePoints[0], 16f))
         }
     }
 
-    // ================================
-    // ⭐ 최종: 거리 기반 진동 + 턴 필터링
-    // ================================
-    private fun checkTurnEvent(current: LatLng) {
-        if (nextTurnIndex >= turnEvents.size) {
-            turnCard.visibility = View.GONE
-            return
-        }
-
-        val target = turnEvents[nextTurnIndex]
-
-        // 거리 계산 + 반경 보정 (6m 허용)
-        val rawDist = distance(current, target.location)
-        val dist = (rawDist - 6f).coerceAtLeast(0f)
-
-        turnCard.visibility = View.VISIBLE
-        turnDistance.text = "${dist.toInt()}m 후"
-
-        when (target.type) {
-            TurnType.LEFT -> {
-                turnIcon.setImageResource(R.drawable.ic_turn_left)
-                turnTypeText.text = "좌회전"
-            }
-            TurnType.RIGHT -> {
-                turnIcon.setImageResource(R.drawable.ic_turn_right)
-                turnTypeText.text = "우회전"
-            }
-            else -> {}
-        }
-
-        // 🛑 시작위치 근처 가짜 턴 제거
-        if (nextTurnIndex == 0 && dist < 20f) {
-            nextTurnIndex++
-            return
-        }
-
-        // 100m 이상 → 진동 없음
-        if (dist > 100f) {
-            stopRepeating()
-            return
-        }
-
-        // 100~50m → 4초 간격 진동
-        if (dist in 50f..100f) {
-            startRepeatingInterval(target.type, 4000)
-            return
-        }
-
-        // 50~10m → 1.2초 간격 진동
-        if (dist in 10f..50f) {
-            startRepeatingInterval(target.type, 1200)
-            return
-        }
-
-        // 10m 이하 → 턴 도달 → 다음 턴
-        if (dist <= 10f) {
-            stopRepeating()
-            nextTurnIndex++
-            return
-        }
+    override fun onResume() {
+        super.onResume()
+        BluetoothManager.attachListener(this)
     }
 
-    private fun distance(a: LatLng, b: LatLng): Float {
-        val arr = FloatArray(1)
-        Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, arr)
-        return arr[0]
-    }
-
-    private fun sendVibration(type: TurnType) {
-        if (!readyToWrite) return
-
-        when (type) {
-            TurnType.LEFT -> BluetoothManager.sendText("L")
-            TurnType.RIGHT -> BluetoothManager.sendText("R")
-            else -> {}
-        }
-    }
-
-    private fun startRepeatingInterval(type: TurnType, intervalMs: Long) {
-        if (isRepeating) return
-
-        repeatHandler = Handler(Looper.getMainLooper())
-        repeatRunnable = object : Runnable {
-            override fun run() {
-                sendVibration(type)
-                repeatHandler?.postDelayed(this, intervalMs)
-            }
-        }
-
-        isRepeating = true
-        repeatHandler?.post(repeatRunnable!!)
-    }
-
-    private fun stopRepeating() {
-        repeatRunnable?.let { repeatHandler?.removeCallbacks(it) }
-        isRepeating = false
+    override fun onPause() {
+        super.onPause()
+        BluetoothManager.attachListener(null)
     }
 
     override fun onReadyToWrite(ready: Boolean) {
         readyToWrite = ready
     }
 
+    override fun onStateChanged(connected: Boolean, deviceName: String?) {
+        if (!connected) stopVibration()
+    }
+
+    private fun setupBackPress() {
+        onBackPressedDispatcher.addCallback(this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    stopVibration()
+                    finish()
+                }
+            })
+    }
+
+    private fun setupBluetooth() {
+        readyToWrite = BluetoothAdapter.getDefaultAdapter()?.isEnabled == true
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startLocationUpdates() {
+        val req = LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            1000
+        ).build()
+
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                val last = result.lastLocation ?: return
+                val my = LatLng(last.latitude, last.longitude)
+                handleTurn(my)
+                updateCamera(my)
+            }
+        }
+
+        fusedLocation.requestLocationUpdates(req, locationCallback, Looper.getMainLooper())
+    }
+
+    private fun updateCamera(pos: LatLng) {
+        val now = System.currentTimeMillis()
+        if (now - lastCameraUpdate < 300) return
+        lastCameraUpdate = now
+
+        mMap?.moveCamera(CameraUpdateFactory.newLatLng(pos))
+    }
+
+    private fun handleTurn(my: LatLng) {
+
+        val dest = destLatLng ?: return
+        val snapDist = getPolylineSnapDistance(my)
+
+        // -------------------------------------------------------
+        // 📌 마지막 턴 이후 → 직진/도착 안내 구간
+        // -------------------------------------------------------
+        if (currentIndex >= turnEvents.size) {
+
+            val distDest = distance(my, dest).toInt()
+            turnDistanceText.text = "${distDest}m 후"
+            turnTypeText.text = "직진"
+
+            // 직진 구간 처음 진입 시 → B 1회 전송
+            if (!enteredStraightMode) {
+                BluetoothManager.sendText("B")
+                enteredStraightMode = true
+            }
+
+            when {
+                distDest >= 100 -> {
+                    stopVibration()
+                }
+
+                distDest in 30..99 -> {
+                    startArrivalVibration()   // 100~30m 도착구간 → B 반복
+                }
+
+                distDest < 30 || snapDist < 12 -> {
+                    if (!arrivalNotified) {
+                        arrivalNotified = true
+                        stopVibration()
+                        Toast.makeText(this, "목적지에 도착했습니다.", Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                }
+            }
+            return
+        }
+
+        // -------------------------------------------------------
+        // 📌 일반 턴 안내
+        // -------------------------------------------------------
+        val target = turnEvents[currentIndex]
+        val dist = distance(my, target.location).toInt()
+
+        turnDistanceText.text = "${dist}m 후"
+        turnTypeText.text = when (target.type) {
+            TurnType.LEFT -> "좌회전"
+            TurnType.RIGHT -> "우회전"
+            TurnType.STRAIGHT -> "직진"
+        }
+
+        // 100~50m: 4초 간격
+        if (!target.trigger50 && dist in 50..120) {
+            target.trigger50 = true
+            startRepeating(target.type, 4000)
+            return
+        }
+
+        // 50~20m: 촘촘 (1.2초)
+        if (!target.trigger25 && dist in 20..50) {
+            target.trigger25 = true
+            startRepeating(target.type, 1200)
+            return
+        }
+
+        // 턴 완료 (20m)
+        if (dist < 20) {
+            stopVibration()
+            currentIndex++
+        }
+    }
+
+    private fun getPolylineSnapDistance(pos: LatLng): Int {
+        if (routePoints.isEmpty()) return 9999
+
+        var minDist = Double.MAX_VALUE
+        for (p in routePoints) {
+            val d = distance(pos, p)
+            if (d < minDist) minDist = d
+        }
+        return minDist.toInt()
+    }
+
+    // L/R 신호 전송
+    private fun sendVibration(type: TurnType) {
+        if (!readyToWrite) return
+
+        val safe = if (!hasRightTurn && type == TurnType.RIGHT) TurnType.LEFT else type
+
+        when (safe) {
+            TurnType.LEFT -> BluetoothManager.sendText("L")
+            TurnType.RIGHT -> BluetoothManager.sendText("R")
+            else -> {}
+        }
+    }
+
+    // 턴 안내 반복 진동
+    private fun startRepeating(type: TurnType, interval: Long) {
+        stopVibration()
+        repeatRunnable = object : Runnable {
+            override fun run() {
+                sendVibration(type)
+                handler.postDelayed(this, interval)
+            }
+        }
+        handler.post(repeatRunnable!!)
+    }
+
+    // ⭐ 도착 안내 (좌우동시) = "B" 반복
+    private fun startArrivalVibration() {
+        if (arrivalVibrationStarted) return
+        stopVibration()
+        arrivalVibrationStarted = true
+
+        repeatRunnable = object : Runnable {
+            override fun run() {
+                BluetoothManager.sendText("B")   // 양쪽 동시에 진동
+                handler.postDelayed(this, 5000)
+            }
+        }
+        handler.post(repeatRunnable!!)
+    }
+
+    private fun distance(a: LatLng, b: LatLng): Double {
+        val R = 6371000.0
+        val dLat = Math.toRadians(b.latitude - a.latitude)
+        val dLon = Math.toRadians(b.longitude - a.longitude)
+        val lat1 = Math.toRadians(a.latitude)
+        val lat2 = Math.toRadians(b.latitude)
+
+        val h = Math.sin(dLat / 2).pow(2) +
+                Math.cos(lat1) * Math.cos(lat2) *
+                Math.sin(dLon / 2).pow(2)
+
+        return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
+    }
+
+    private fun Double.pow(n: Int): Double = Math.pow(this, n.toDouble())
+
     override fun onDestroy() {
         super.onDestroy()
-        BluetoothManager.attachListener(null)
-        stopRepeating()
+        stopVibration()
+        fusedLocation.removeLocationUpdates(locationCallback)
     }
 
-    override fun onMapReady(map: GoogleMap) {
-        googleMap = map
-
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            googleMap?.isMyLocationEnabled = true
-        }
-
-        if (routePoints.isNotEmpty()) {
-            val polylineOptions = PolylineOptions()
-                .addAll(routePoints)
-                .width(10f)
-                .color(0xFF2196F3.toInt())
-
-            routePolyline = googleMap?.addPolyline(polylineOptions)
-
-            googleMap?.moveCamera(
-                CameraUpdateFactory.newLatLngZoom(routePoints.first(), 16f)
-            )
-        }
+    private fun stopVibration() {
+        repeatRunnable?.let { handler.removeCallbacks(it) }
+        repeatRunnable = null
+        arrivalVibrationStarted = false
     }
-
-    override fun onLog(msg: String) {}
 }

@@ -28,7 +28,6 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener, OnMapRea
     private lateinit var stopButton: Button
 
     private var mMap: GoogleMap? = null
-
     private var readyToWrite = false
 
     private lateinit var fusedLocation: FusedLocationProviderClient
@@ -45,9 +44,9 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener, OnMapRea
     private val handler = Handler(Looper.getMainLooper())
     private var repeatRunnable: Runnable? = null
 
-    private var arrivalVibrationStarted = false
     private var arrivalNotified = false
     private var enteredStraightMode = false
+    private var arrivalVibrationActive = false   // ⭐ 도착 구간 진동 ON/OFF 상태
 
     private var lastCameraUpdate = 0L
 
@@ -86,7 +85,8 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener, OnMapRea
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
 
-        mMap?.isMyLocationEnabled = true   // 내 위치 아이콘 표시
+        // 내 위치 아이콘 표시
+        mMap?.isMyLocationEnabled = true
 
         if (routePoints.isNotEmpty()) {
             val poly = PolylineOptions()
@@ -178,17 +178,21 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener, OnMapRea
                 enteredStraightMode = true
             }
 
-            // ⭐ 도착 70~20m: 1.2초 주기 B 반복
+            // ⭐ 도착 70~20m: 5초 주기 B 반복 진동 (구간 진입 시 한 번만 시작)
             if (distDest in 20..70) {
-                startArrivalVibrationRepeated()
+                if (!arrivalVibrationActive) {
+                    startArrivalVibrationRepeated()
+                    arrivalVibrationActive = true
+                }
+            } else {
+                // ⭐ 70m 밖으로 나가거나 20m 아래로 내려가면 → 반복진동 종료
+                if (arrivalVibrationActive) {
+                    stopVibration()
+                    arrivalVibrationActive = false
+                }
             }
 
-            // ⭐ 도착 20m 이하 → 진동 중단
-            if (distDest < 20) {
-                stopVibration()
-            }
-
-            // ⭐ 도착 Toast 조건은 30m 이하 OR polylineSnap <12m (기존 유지)
+            // ⭐ 도착 안내 (기존 조건 유지)
             if ((distDest < 30 || snapDist < 12) && !arrivalNotified) {
                 arrivalNotified = true
                 stopVibration()
@@ -219,14 +223,14 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener, OnMapRea
             return
         }
 
-        // 50~20m: 촘촘 (1.2초)
+        // 50~20m: 1.2초 간격
         if (!target.trigger25 && dist in 20..50) {
             target.trigger25 = true
             startRepeating(type = target.type, interval = 1200)
             return
         }
 
-        // 턴 완료 (20m)
+        // 턴 완료 (20m 이하)
         if (dist < 20) {
             stopVibration()
             currentIndex++
@@ -269,16 +273,15 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener, OnMapRea
         handler.post(repeatRunnable!!)
     }
 
-    // ⭐ 도착 70~20m 구간용 반복 진동 ("B")
+    // ⭐ 도착 70~20m 구간 반복 진동 (5초 간격)
     private fun startArrivalVibrationRepeated() {
-        if (arrivalVibrationStarted) return
+        // 마지막 턴 진동(좌/우) 등 정리
         stopVibration()
-        arrivalVibrationStarted = true
 
         repeatRunnable = object : Runnable {
             override fun run() {
-                BluetoothManager.sendText("B")   // 양쪽 동시에 진동
-                handler.postDelayed(this, 1200)
+                BluetoothManager.sendText("B")   // 양쪽 진동
+                handler.postDelayed(this, 5000) // ★ 5초 간격
             }
         }
         handler.post(repeatRunnable!!)
@@ -309,6 +312,6 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener, OnMapRea
     private fun stopVibration() {
         repeatRunnable?.let { handler.removeCallbacks(it) }
         repeatRunnable = null
-        arrivalVibrationStarted = false
+        // arrivalVibrationActive 플래그는 handleTurn 쪽에서 관리
     }
 }

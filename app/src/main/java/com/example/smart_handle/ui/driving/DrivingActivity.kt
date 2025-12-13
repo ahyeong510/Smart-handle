@@ -144,7 +144,10 @@ class DrivingActivity : AppCompatActivity(),
 
     private fun checkTurnEvent(current: LatLng) {
         if (nextTurnIndex >= turnEvents.size) {
-            turnCard.visibility = View.GONE
+            // ✅ 이미 목적지 도착 처리가 된 상태라면 카드를 숨기지 않음
+            if (!isArrivalNotified) {
+                turnCard.visibility = View.GONE
+            }
             return
         }
 
@@ -205,6 +208,11 @@ class DrivingActivity : AppCompatActivity(),
 
             // 혹시 남아 있는 반복 턴 진동이 있다면 끄기
             stopRepeating()
+
+            // ✅ 화면에 도착 문구 표시
+            turnCard.visibility = View.VISIBLE
+            turnDistance.text = ""  // "0m 후" 대신 비우거나 "도착" 등으로 표시
+            turnTypeText.text = "목적지에 도착했습니다"
 
             // 양쪽 핸들 도착 패턴 시작
             startArrivalVibration()

@@ -50,6 +50,8 @@ class DrivingActivity : AppCompatActivity(),
     private var repeatHandler: Handler? = null
     private var repeatRunnable: Runnable? = null
     private var isRepeating = false
+    private var isArrivalNotified = false   // 목적지 도착 진동 이미 울렸는지 여부
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -129,7 +131,10 @@ class DrivingActivity : AppCompatActivity(),
             // 1) 기존 턴 이벤트 체크
             checkTurnEvent(here)
 
-            // 2)  네비처럼 카메라를 현재 위치로 이동
+            // 2) 목적지 도착(20m 이내) 체크
+            checkArrival(here)
+
+            // 3)  네비처럼 카메라를 현재 위치로 이동
             googleMap?.animateCamera(
                 CameraUpdateFactory.newLatLngZoom(here, 17f)   // 17 정도면 네비 느낌
             )
@@ -184,6 +189,56 @@ class DrivingActivity : AppCompatActivity(),
             nextTurnIndex++
         }
     }
+
+    /** 목적지(마지막 TurnEvent) 20m 이내 진입 시 도착 진동 패턴 실행 */
+    private fun checkArrival(current: LatLng) {
+        // 이미 도착 진동을 울렸거나, 턴 이벤트가 없다면 아무것도 안 함
+        if (isArrivalNotified || turnEvents.isEmpty()) return
+
+        // 목적지를 turnEvents의 마지막 포인트로 간주
+        val destination = turnEvents.last().location
+        val distToDest = distance(current, destination)
+
+        if (distToDest <= 20f) {
+            // 도착 진동은 한 번만
+            isArrivalNotified = true
+
+            // 혹시 남아 있는 반복 턴 진동이 있다면 끄기
+            stopRepeating()
+
+            // 양쪽 핸들 도착 패턴 시작
+            startArrivalVibration()
+        }
+    }
+
+    /** 목적지 도착 시: 양쪽 핸들을 짧은 간격으로 3번 울리는 패턴 */
+    private fun startArrivalVibration() {
+        if (!readyToWrite) return
+
+        val handler = Handler(Looper.getMainLooper())
+        var count = 0
+
+        val runnable = object : Runnable {
+            override fun run() {
+                if (count >= 3) {
+                    // 3번 끝
+                    return
+                }
+
+                // 양쪽 핸들을 짧게 한 번씩 진동
+                BluetoothManager.sendText("L")
+                BluetoothManager.sendText("R")
+
+                count++
+                // 다음 사이클까지 간격(0.3초 정도, 원하면 조절)
+                handler.postDelayed(this, 300)
+            }
+        }
+
+        // 바로 첫 사이클 시작
+        handler.post(runnable)
+    }
+
 
     private fun distance(a: LatLng, b: LatLng): Float {
         val arr = FloatArray(1)

@@ -1,9 +1,8 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose") // ✅ 버전 제거
+    id("org.jetbrains.kotlin.plugin.compose")
 }
-
 
 android {
     namespace = "com.example.smart_handle"
@@ -49,20 +48,41 @@ android {
 }
 
 dependencies {
-    // ✅ Android 기본 라이브러리
+
+    // ─────────────────────
+    // Android 기본
+    // ─────────────────────
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
-    // ✅ Google 지도 및 위치
+    // ─────────────────────
+    // Google Map / Location
+    // ─────────────────────
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.android.gms:play-services-location:21.0.1")
 
-    // ✅ Kotlin 코루틴 (비동기 작업)
+    // ─────────────────────
+    // Coroutine (이미 사용 중)
+    // ─────────────────────
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // ✅ Jetpack Compose
+    // ─────────────────────
+    // 🔥 Retrofit + Gson (AI 서버 통신 핵심)
+    // ─────────────────────
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+
+    // ─────────────────────
+    // 🔥 ViewModel / Lifecycle (viewModels, StateFlow)
+    // ─────────────────────
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+
+    // ─────────────────────
+    // Jetpack Compose (기존 유지)
+    // ─────────────────────
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation(platform("androidx.compose:compose-bom:2024.04.01"))
     implementation("androidx.compose.ui:ui")
@@ -70,11 +90,15 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
 
-    // ✅ Navigation
+    // ─────────────────────
+    // Navigation (Compose)
+    // ─────────────────────
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("androidx.compose.material:material-icons-extended")
 
-    // ✅ 테스트 관련
+    // ─────────────────────
+    // Test
+    // ─────────────────────
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")

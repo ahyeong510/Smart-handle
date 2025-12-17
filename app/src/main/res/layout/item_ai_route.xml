@@ -3,30 +3,25 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="12dp"
-    android:layout_marginBottom="12dp"
-    android:background="#FFFFFF">
+    android:padding="16dp"
+    android:background="@android:color/white"
+    android:layout_marginBottom="8dp">
 
     <TextView
         android:id="@+id/tvTitle"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textStyle="bold"
+        android:text="운동 코스 1"
         android:textSize="16sp"
-        android:textColor="#111" />
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/tvInfo"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:textSize="13sp"
-        android:textColor="#666" />
-
-    <com.google.android.gms.maps.MapView
-        android:id="@+id/mapView"
-        android:layout_width="match_parent"
-        android:layout_height="160dp"
-        android:layout_marginTop="10dp" />
+        android:text="12.4 km · 약 50분"
+        android:textSize="14sp"
+        android:textColor="#666666" />
 
 </LinearLayout>

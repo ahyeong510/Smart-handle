@@ -1,10 +1,7 @@
 package com.example.smart_handle.ui.fitness.ai
 
-import android.content.Intent
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
@@ -12,130 +9,107 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.smart_handle.R
-import com.example.smart_handle.ui.driving.DrivingActivity
 import com.example.smart_handle.ui.fitness.model.AiRoute
-import okhttp3.HttpUrl
+import com.google.android.gms.location.LocationServices
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import kotlin.math.roundToInt
 
-class AiWorkoutFragment : Fragment() {
+class AiWorkoutFragment : Fragment(R.layout.fragment_ai_workout) {
 
     companion object {
-        // 🔴 여기만 실제 PC IP로 수정
-        private const val SERVER_IP = "192.168.219.118"   // 예: 192.168.0.12
+        private const val SERVER_IP = "172.16.169.48"
         private const val SERVER_PORT = 8000
     }
 
-    private lateinit var adapter: AiRouteAdapter
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var inputDistance: EditText
+    private lateinit var btnGenerate: Button
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
 
-        val view = inflater.inflate(R.layout.fragment_ai_workout, container, false)
-
-        val recyclerView = view.findViewById<RecyclerView>(R.id.recyclerView)
-        val distanceInput = view.findViewById<EditText>(R.id.etDistance)
-        val generateBtn = view.findViewById<Button>(R.id.btnGenerateRoute)
-
-        adapter = AiRouteAdapter { routeId ->
-            startDriving(routeId)
-        }
+        recyclerView = view.findViewById(R.id.aiRouteRecycler)
+        inputDistance = view.findViewById(R.id.edit_distance)
+        btnGenerate = view.findViewById(R.id.btn_generate_ai_route)
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        recyclerView.adapter = adapter
 
-        generateBtn.setOnClickListener {
-            val km = distanceInput.text.toString().toDoubleOrNull()
+        btnGenerate.setOnClickListener {
+            val km = inputDistance.text.toString().toDoubleOrNull()
             if (km == null || km <= 0) {
-                Toast.makeText(requireContext(), "거리(km)를 입력하세요", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), "거리 입력 오류", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            requestAiRoutes(km)
-        }
 
-        return view
+            requestAiRoutesWithCurrentLocation(km)
+        }
     }
 
-    // =========================
-    // AI 경로 추천 요청
-    // =========================
-    private fun requestAiRoutes(distanceKm: Double) {
+    private fun requestAiRoutesWithCurrentLocation(distanceKm: Double) {
+        val fused = LocationServices.getFusedLocationProviderClient(requireContext())
+
+        fused.lastLocation.addOnSuccessListener { loc ->
+            if (loc == null) {
+                Toast.makeText(requireContext(), "현재 위치를 가져올 수 없습니다", Toast.LENGTH_SHORT).show()
+                return@addOnSuccessListener
+            }
+
+            val lat = loc.latitude
+            val lng = loc.longitude
+
+            requestAiRoutes(distanceKm, lat, lng)
+        }
+    }
+
+    private fun requestAiRoutes(distanceKm: Double, lat: Double, lng: Double) {
         Thread {
             try {
-                // ✅ 안전한 URL 생성 (핵심)
-                val httpUrl = HttpUrl.Builder()
-                    .scheme("http")
-                    .host(SERVER_IP)
-                    .port(SERVER_PORT)
-                    .addPathSegment("recommend")
-                    .addQueryParameter("lat", "37.5665")
-                    .addQueryParameter("lng", "126.9780")
-                    .addQueryParameter("distance", distanceKm.toString())
-                    .build()
+                val url =
+                    "http://$SERVER_IP:$SERVER_PORT/recommend?distance=$distanceKm&lat=$lat&lng=$lng"
 
-                android.util.Log.e("AI_URL", httpUrl.toString())
+                val request = Request.Builder().url(url).build()
+                val response = OkHttpClient().newCall(request).execute()
 
-                val client = OkHttpClient()
-                val request = Request.Builder()
-                    .url(httpUrl)
-                    .get()
-                    .build()
+                val bodyString = response.body()?.string()
+                    ?: throw Exception("Empty response")
 
-                val response = client.newCall(request).execute()
-
-                if (!response.isSuccessful) {
-                    throw RuntimeException("HTTP ${response.code()}")
-                }
-
-                val body = response.body()?.string()
-                    ?: throw RuntimeException("empty body")
-
-                android.util.Log.e("AI_DEBUG", "response = $body")
-
-                val json = JSONObject(body)
+                val json = JSONObject(bodyString)
                 val arr = json.getJSONArray("routes")
 
-                val newRoutes = mutableListOf<AiRoute>()
+                val routes = mutableListOf<AiRoute>()
+
                 for (i in 0 until arr.length()) {
-                    val r = arr.getJSONObject(i)
-                    newRoutes.add(
+                    val o = arr.getJSONObject(i)
+                    val dist = o.getDouble("distance_km")
+                    val duration = (dist / 15.0 * 60).roundToInt()
+
+                    routes.add(
                         AiRoute(
-                            id = r.getInt("id"),
-                            distanceKm = r.getDouble("distance_km"),
-                            durationMin = r.getInt("duration_min")
+                            id = o.getInt("id"),
+                            distanceKm = dist,
+                            durationMin = duration
                         )
                     )
                 }
 
                 requireActivity().runOnUiThread {
-                    adapter.submit(newRoutes)
+                    recyclerView.adapter = AiRouteAdapter(routes) { route ->
+                        val intent =
+                            android.content.Intent(requireContext(), com.example.smart_handle.ui.driving.DrivingActivity::class.java)
+                        intent.putExtra("ROUTE_MODE", "AI_WORKOUT")
+                        intent.putExtra("ROUTE_ID", route.id)
+                        startActivity(intent)
+                    }
                 }
 
             } catch (e: Exception) {
                 e.printStackTrace()
                 requireActivity().runOnUiThread {
-                    Toast.makeText(
-                        requireContext(),
-                        "추천 경로 실패: ${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    Toast.makeText(requireContext(), "추천 경로 실패", Toast.LENGTH_SHORT).show()
                 }
             }
         }.start()
-    }
-
-    // =========================
-    // 주행 시작
-    // =========================
-    private fun startDriving(routeId: Int) {
-        val intent = Intent(requireContext(), DrivingActivity::class.java).apply {
-            putExtra("ROUTE_MODE", "AI_WORKOUT")
-            putExtra("ROUTE_ID", routeId)
-        }
-        startActivity(intent)
     }
 }

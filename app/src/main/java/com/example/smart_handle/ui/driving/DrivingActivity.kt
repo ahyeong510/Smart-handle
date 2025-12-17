@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothAdapter
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Looper
+import android.util.Log
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
@@ -13,9 +14,8 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.smart_handle.R
-import com.example.smart_handle.ui.ble.BluetoothManager
 import com.example.smart_handle.maps.TurnEvent
-import com.example.smart_handle.maps.TurnType
+import com.example.smart_handle.ui.ble.BluetoothManager
 import com.google.android.gms.location.*
 import com.google.android.gms.maps.*
 import com.google.android.gms.maps.model.*
@@ -51,6 +51,12 @@ class DrivingActivity : AppCompatActivity(),
 
     private var destLatLng: LatLng? = null
 
+    companion object {
+        private const val TAG = "DrivingActivity"
+        // ✅ 여기만 바꾸면 프로젝트 전체에서 서버 주소 통일하기 쉬움
+        private const val BASE_URL = "http://192.168.219.118:8000"
+    }
+
     // =========================
     // Activity lifecycle
     // =========================
@@ -81,8 +87,7 @@ class DrivingActivity : AppCompatActivity(),
         }
 
         val mapFragment =
-            supportFragmentManager.findFragmentById(R.id.drive_map)
-                    as SupportMapFragment
+            supportFragmentManager.findFragmentById(R.id.drive_map) as SupportMapFragment
         mapFragment.getMapAsync(this)
 
         setupBackPress()
@@ -113,6 +118,7 @@ class DrivingActivity : AppCompatActivity(),
                 redrawMap()
                 startLocationUpdates()
             } catch (e: Exception) {
+                Log.e(TAG, "loadAiRouteFromServer failed", e)
                 Toast.makeText(this@DrivingActivity, "경로 로딩 실패", Toast.LENGTH_SHORT).show()
                 finish()
             }
@@ -123,12 +129,22 @@ class DrivingActivity : AppCompatActivity(),
         withContext(Dispatchers.IO) {
             val client = OkHttpClient()
             val request = Request.Builder()
-                .url("http://10.0.2.2:8000/route/$routeId")
+                // ✅ 여기 수정: 10.0.2.2 → PC IP(BASE_URL)로 통일
+                .url("$BASE_URL/route/$routeId")
                 .build()
 
             val response = client.newCall(request).execute()
-            val body = response.body()?.string()
-                ?: error("empty response")
+
+            // ✅ 실패 코드면 원인 남기고 예외 처리
+            if (!response.isSuccessful) {
+                val errBody = response.body()?.string()
+                Log.e(TAG, "fetchPolyline HTTP ${response.code()} body=$errBody")
+                error("fetchPolyline failed: HTTP ${response.code()}")
+            }
+
+            val body = response.body()?.string() ?: error("empty response")
+
+            Log.d(TAG, "fetchPolyline body=$body")
 
             val arr = JSONObject(body).getJSONArray("polyline")
             val list = mutableListOf<LatLng>()
@@ -148,7 +164,14 @@ class DrivingActivity : AppCompatActivity(),
     // =========================
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
-        mMap?.isMyLocationEnabled = true
+
+        // ✅ 권한 없을 때 크래시 방지(권한 처리는 프로젝트 구조에 맞게 따로 해도 됨)
+        try {
+            mMap?.isMyLocationEnabled = true
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Location permission missing: ${e.message}")
+        }
+
         redrawMap()
     }
 
@@ -233,7 +256,6 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     private fun stopVibration() {
-        // 🔑 실제 프로젝트 구조에 맞는 안전한 종료 신호
         BluetoothManager.sendText("STOP")
     }
 

@@ -6,15 +6,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.smart_handle.R
-import com.example.smart_handle.network.ApiClient
 import com.example.smart_handle.network.models.RouteSummary
 import com.example.smart_handle.ui.fitness.RouteAdapter
 import com.example.smart_handle.ui.fitness.RouteModel
-import kotlinx.coroutines.*
 import com.google.android.gms.maps.model.LatLng
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 class FitnessRouteFragment : Fragment() {
 
@@ -24,16 +26,21 @@ class FitnessRouteFragment : Fragment() {
     private lateinit var tvResult: TextView
     private lateinit var recyclerFitness: RecyclerView
 
-    private val api = ApiClient.service
+    // ViewModel
+    private val viewModel: FitnessRouteViewModel by viewModels()
 
-    private var currentLocationLat = 37.5665
-    private var currentLocationLng = 126.9780
+    // 임시 현재 위치
+    private val currentLocationLat = 37.5665
+    private val currentLocationLng = 126.9780
+
+    // 사용자가 버튼을 눌렀는지 여부
+    private var hasRequested = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
+    ): View {
 
         val view = inflater.inflate(R.layout.fragment_fitness_route, container, false)
 
@@ -43,7 +50,7 @@ class FitnessRouteFragment : Fragment() {
         tvResult = view.findViewById(R.id.tvResult)
         recyclerFitness = view.findViewById(R.id.recyclerFitness)
 
-        // 거리 입력 NumberPicker
+        // NumberPicker 설정
         npDistance.minValue = 1
         npDistance.maxValue = 50
         npDistance.value = 10
@@ -51,46 +58,72 @@ class FitnessRouteFragment : Fragment() {
         recyclerFitness.layoutManager = LinearLayoutManager(requireContext())
 
         btnGenerateRoute.setOnClickListener {
-            requestRecommendedRoutes(npDistance.value.toDouble())
+            hasRequested = true
+            viewModel.loadRecommend(
+                lat = currentLocationLat,
+                lng = currentLocationLng,
+                distance = npDistance.value.toDouble()
+            )
         }
+
+        observeViewModel()
 
         return view
     }
 
-    private fun requestRecommendedRoutes(distanceKm: Double) {
-        progressBar.visibility = View.VISIBLE
-        tvResult.text = ""
+    private fun observeViewModel() {
 
-        CoroutineScope(Dispatchers.IO).launch {
-            val response = try {
-                api.getRecommend(
-                    lat = currentLocationLat,
-                    lng = currentLocationLng,
-                    distance = distanceKm
-                )
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
+        // 로딩 상태 관찰
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.loading.collectLatest { isLoading ->
+                progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
             }
+        }
 
-            withContext(Dispatchers.Main) {
-                progressBar.visibility = View.GONE
+        // 추천 결과 관찰
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.recommendResult.collectLatest { response ->
 
+                // 앱 시작 직후 자동 emit 무시
+                if (!hasRequested) return@collectLatest
+
+                // 서버 에러
                 if (response == null) {
-                    Toast.makeText(requireContext(), "서버 오류 발생", Toast.LENGTH_SHORT).show()
-                    return@withContext
+                    Toast.makeText(
+                        requireContext(),
+                        "서버 오류 발생",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@collectLatest
                 }
 
-                // 추천된 거리 표시
+                // 추천 결과 없음
+                if (response.routes.isNullOrEmpty()) {
+                    Toast.makeText(
+                        requireContext(),
+                        "추천 가능한 경로가 없습니다",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    recyclerFitness.adapter = null
+                    tvResult.text = ""
+                    return@collectLatest
+                }
+
+                // 정상 응답
                 tvResult.text = "추천된 거리: ${response.recommended_distance} km"
 
-                // 리스트 변환
-                val routeList = response.routes.map { convertToRouteModel(it) }
+                val routeList = response.routes.map { route ->
+                    convertToRouteModel(route)
+                }
 
                 recyclerFitness.adapter = RouteAdapter(
                     routeList,
                     onSelected = { route ->
-                        Toast.makeText(requireContext(), "${route.title} 선택됨!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            requireContext(),
+                            "${route.title} 선택됨!",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 )
             }
@@ -99,14 +132,21 @@ class FitnessRouteFragment : Fragment() {
 
     private fun convertToRouteModel(src: RouteSummary): RouteModel {
 
-        val pts = emptyList<LatLng>()  // polyline은 추후 상세 API에서 로딩
+        val pts = emptyList<LatLng>()
+
+        val titleText = when {
+            src.difficulty_score < 30 -> "쉬운 코스"
+            src.difficulty_score < 60 -> "보통 코스"
+            else -> "어려운 코스"
+        }
 
         return RouteModel(
-            id = src.id,
-            title = src.name,
-            distanceKm = src.distance,
-            timeMin = src.turn_count * 3,  // 임시 계산
+            id = 0,
+            title = titleText,
+            distanceKm = src.distance_m / 1000.0,
+            timeMin = ((src.distance_m / 1000.0) * 4).toInt(),
             path = pts
         )
     }
 }
+

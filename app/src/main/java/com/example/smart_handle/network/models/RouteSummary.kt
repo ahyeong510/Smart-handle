@@ -1,10 +1,8 @@
 package com.example.smart_handle.network.models
 
 data class RouteSummary(
-    val id: Int,
-    val name: String,
-    val distance: Double,
-    val source: String,
-    val path_point_count: Int,
-    val turn_count: Int
+    val distance_m: Double,
+    val total_ascent_m: Double,
+    val max_grade_percent: Double,
+    val difficulty_score: Double
 )

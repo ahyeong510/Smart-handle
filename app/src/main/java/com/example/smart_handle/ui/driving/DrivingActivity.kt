@@ -14,12 +14,15 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.smart_handle.R
+import com.example.smart_handle.maps.MapDirectionHelper
 import com.example.smart_handle.maps.TurnEvent
 import com.example.smart_handle.maps.TurnType
 import com.example.smart_handle.ui.ble.BluetoothManager
 import com.google.android.gms.location.*
 import com.google.android.gms.maps.model.LatLng
+import kotlinx.coroutines.launch
 
 class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
 
@@ -31,12 +34,21 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
     private lateinit var turnTypeText: TextView
 
     private var readyToWrite = false
-    private var turnEvents: MutableList<TurnEvent> = mutableListOf()
+    private val turnEvents: MutableList<TurnEvent> = mutableListOf()
     private var nextTurnIndex = 0
 
     private var repeatHandler: Handler? = null
     private var repeatRunnable: Runnable? = null
     private var isRepeating = false
+
+    // ⭐ 운동 모드 안정화용
+    private var fitnessStartLocation: LatLng? = null
+    private var isFitnessMovementConfirmed = false
+
+    // ⭐ 운동 모드 목적지
+    private var endLat: Double = Double.NaN
+    private var endLng: Double = Double.NaN
+    private var isFitnessRouteInitialized = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,15 +63,17 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
             finish()
         }
 
-        // 🔥 DrivingActivity 가 BLE listener가 됨
         BluetoothManager.attachListener(this)
-
-
         fused = LocationServices.getFusedLocationProviderClient(this)
 
+        // 1️⃣ 길찾기 모드
         intent.getParcelableArrayListExtra<TurnEvent>("turn_events")?.let {
-            turnEvents.addAll(it)
+            if (it.isNotEmpty()) turnEvents.addAll(it)
         }
+
+        // 2️⃣ 운동 모드 목적지
+        endLat = intent.getDoubleExtra("end_lat", Double.NaN)
+        endLng = intent.getDoubleExtra("end_lng", Double.NaN)
 
         checkLocationPermission()
     }
@@ -90,7 +104,42 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val loc = result.lastLocation ?: return
-            checkTurnEvent(LatLng(loc.latitude, loc.longitude))
+            val current = LatLng(loc.latitude, loc.longitude)
+
+            // ⭐ 운동 모드 turnEvents 생성
+            if (
+                turnEvents.isEmpty() &&
+                !endLat.isNaN() &&
+                !endLng.isNaN() &&
+                !isFitnessRouteInitialized
+            ) {
+                isFitnessRouteInitialized = true
+                fitnessStartLocation = current
+                createTurnEventsForFitnessMode(current, LatLng(endLat, endLng))
+                return
+            }
+
+            // ⭐ 실제 이동 전까지 턴 이벤트 무시
+            if (fitnessStartLocation != null && !isFitnessMovementConfirmed) {
+                if (distance(current, fitnessStartLocation!!) < 10) return
+                isFitnessMovementConfirmed = true
+            }
+
+            checkTurnEvent(current)
+        }
+    } // ✅ 이 중괄호가 핵심
+
+    private fun createTurnEventsForFitnessMode(start: LatLng, end: LatLng) {
+        lifecycleScope.launch {
+            val result = MapDirectionHelper.getRoute(
+                startLat = start.latitude,
+                startLng = start.longitude,
+                endLat = end.latitude,
+                endLng = end.longitude
+            )
+            turnEvents.clear()
+            turnEvents.addAll(result.turnEvents)
+            nextTurnIndex = 0
         }
     }
 
@@ -128,11 +177,9 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
             target.trigger25 = true
         }
 
-        if (dist < 10 && dist >= 3) {
-            if (!isRepeating) {
-                startRepeating(target.type)
-                isRepeating = true
-            }
+        if (dist < 10 && dist >= 3 && !isRepeating) {
+            startRepeating(target.type)
+            isRepeating = true
         }
 
         if (dist < 3) {
@@ -149,7 +196,6 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
 
     private fun sendVibration(type: TurnType) {
         if (!readyToWrite) return
-
         when (type) {
             TurnType.LEFT -> BluetoothManager.sendText("L")
             TurnType.RIGHT -> BluetoothManager.sendText("R")
@@ -183,3 +229,4 @@ class DrivingActivity : AppCompatActivity(), BluetoothManager.Listener {
         stopRepeating()
     }
 }
+

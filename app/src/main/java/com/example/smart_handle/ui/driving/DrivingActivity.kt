@@ -14,10 +14,14 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.smart_handle.R
 import com.example.smart_handle.maps.TurnEvent
 import com.example.smart_handle.maps.TurnType
 import com.example.smart_handle.ui.ble.BluetoothManager
+import com.example.smart_handle.data.AppDatabase
+import com.example.smart_handle.data.RideDao
+import com.example.smart_handle.data.RideEntity
 import com.google.android.gms.location.*
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -26,15 +30,14 @@ import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
-import kotlin.math.roundToInt
-
-
+import kotlinx.coroutines.launch
 
 class DrivingActivity : AppCompatActivity(),
     BluetoothManager.Listener,
     OnMapReadyCallback {
 
     private lateinit var fused: FusedLocationProviderClient
+    private lateinit var locationRequest: LocationRequest
 
     private var googleMap: GoogleMap? = null
     private var currentLatLng: LatLng? = null
@@ -43,19 +46,33 @@ class DrivingActivity : AppCompatActivity(),
     private lateinit var turnDistance: TextView
     private lateinit var turnTypeText: TextView
 
+    // Room DB
+    private lateinit var database: AppDatabase
+    private lateinit var rideDao: RideDao
+
+    // 주행 기록용
+    private var startTime: Long = 0L
+    private var totalDistanceMeters: Float = 0f
+    private var lastLocation: Location? = null
+    private var rideSaved = false
+
     private var readyToWrite = false
     private var turnEvents: MutableList<TurnEvent> = mutableListOf()
     private var nextTurnIndex = 0
 
-    private var repeatHandler: Handler? = null
-    private var repeatRunnable: Runnable? = null
-    private var isRepeating = false
-    private var isArrivalNotified = false   // 목적지 도착 진동 이미 울렸는지 여부
+    private var isArrivalNotified = false
 
+    private val routePoints = mutableListOf<LatLng>()
+    private var routePolyline: Polyline? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driving_navigation)
+
+        database = AppDatabase.getDatabase(this)
+        rideDao = database.rideDao()
+
+        startTime = System.currentTimeMillis()
 
         val mapFragment = supportFragmentManager
             .findFragmentById(R.id.drive_map) as SupportMapFragment
@@ -67,13 +84,12 @@ class DrivingActivity : AppCompatActivity(),
         turnTypeText = findViewById(R.id.turnTypeText)
 
         findViewById<Button>(R.id.btn_stop_route).setOnClickListener {
+            stopLocationTracking()
+            saveRideData(false)
             finish()
         }
 
-        // 🔥 DrivingActivity 가 BLE listener가 됨
         BluetoothManager.attachListener(this)
-
-
         fused = LocationServices.getFusedLocationProviderClient(this)
 
         intent.getParcelableArrayListExtra<TurnEvent>("turn_events")?.let {
@@ -84,16 +100,35 @@ class DrivingActivity : AppCompatActivity(),
             routePoints.addAll(it)
         }
 
-
         checkLocationPermission()
     }
 
-    // 경로 전체 좌표
-    private val routePoints = mutableListOf<LatLng>()
+    private fun saveRideData(isCompleted: Boolean) {
 
-    // 지도에 그려질 폴리라인 객체
-    private var routePolyline: Polyline? = null
+        if (rideSaved) return
+        rideSaved = true
 
+        val endTime = System.currentTimeMillis()
+        val durationSeconds = (endTime - startTime) / 1000
+        val distanceKm = totalDistanceMeters / 1000.0
+
+        lifecycleScope.launch {
+            val ride = RideEntity(
+                distance = distanceKm,
+                duration = durationSeconds,
+                elevationGain = 0.0,
+                completed = isCompleted,
+                date = System.currentTimeMillis()
+            )
+
+            rideDao.insertRide(ride)
+            android.util.Log.d("DB_SAVE", "저장 완료: $distanceKm km")
+        }
+    }
+
+    private fun stopLocationTracking() {
+        fused.removeLocationUpdates(locationCallback)
+    }
 
     private fun checkLocationPermission() {
         val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -114,139 +149,52 @@ class DrivingActivity : AppCompatActivity(),
 
         googleMap?.isMyLocationEnabled = true
 
-        val req = LocationRequest.Builder(700)
+        locationRequest = LocationRequest.Builder(700)
             .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
             .build()
 
-        fused.requestLocationUpdates(req, locationCallback, Looper.getMainLooper())
+        fused.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
     }
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val loc = result.lastLocation ?: return
 
+            if (lastLocation != null) {
+                totalDistanceMeters += lastLocation!!.distanceTo(loc)
+            }
+            lastLocation = loc
+
             val here = LatLng(loc.latitude, loc.longitude)
             currentLatLng = here
 
-            // 1) 기존 턴 이벤트 체크
-            checkTurnEvent(here)
-
-            // 2) 목적지 도착(20m 이내) 체크
             checkArrival(here)
 
-            // 3)  네비처럼 카메라를 현재 위치로 이동
             googleMap?.animateCamera(
-                CameraUpdateFactory.newLatLngZoom(here, 17f)   // 17 정도면 네비 느낌
+                CameraUpdateFactory.newLatLngZoom(here, 17f)
             )
         }
     }
 
-
-    private fun checkTurnEvent(current: LatLng) {
-        if (nextTurnIndex >= turnEvents.size) {
-            // ✅ 이미 목적지 도착 처리가 된 상태라면 카드를 숨기지 않음
-            if (!isArrivalNotified) {
-                turnCard.visibility = View.GONE
-            }
-            return
-        }
-
-        val target = turnEvents[nextTurnIndex]
-        val dist = distance(current, target.location)
-
-        val displayDist = dist.roundToInt()
-        turnCard.visibility = View.VISIBLE
-        turnDistance.text = "${dist.toInt()}m 후"
-
-        when (target.type) {
-            TurnType.LEFT -> {
-                turnIcon.setImageResource(R.drawable.ic_turn_left)
-                turnTypeText.text = "좌회전"
-            }
-            TurnType.RIGHT -> {
-                turnIcon.setImageResource(R.drawable.ic_turn_right)
-                turnTypeText.text = "우회전"
-            }
-            else -> {}
-        }
-
-        if (!target.trigger50 && dist < 50 && dist >= 25) {
-            sendVibration(target.type)
-            target.trigger50 = true
-        }
-
-        if (!target.trigger25 && dist < 25 && dist >= 10) {
-            sendVibration(target.type)
-            target.trigger25 = true
-        }
-
-        if (dist < 10 && dist >= 3) {
-            if (!isRepeating) {
-                startRepeating(target.type)
-                isRepeating = true
-            }
-        }
-
-        if (dist < 3) {
-            stopRepeating()
-            nextTurnIndex++
-        }
-    }
-
-    /** 목적지(마지막 TurnEvent) 20m 이내 진입 시 도착 진동 패턴 실행 */
     private fun checkArrival(current: LatLng) {
-        // 이미 도착 진동을 울렸거나, 턴 이벤트가 없다면 아무것도 안 함
+
         if (isArrivalNotified || turnEvents.isEmpty()) return
 
-        // 목적지를 turnEvents의 마지막 포인트로 간주
         val destination = turnEvents.last().location
         val distToDest = distance(current, destination)
 
         if (distToDest <= 20f) {
-            // 도착 진동은 한 번만
+
+            stopLocationTracking()
+            saveRideData(true)
+
             isArrivalNotified = true
 
-            // 혹시 남아 있는 반복 턴 진동이 있다면 끄기
-            stopRepeating()
-
-            // ✅ 화면에 도착 문구 표시
             turnCard.visibility = View.VISIBLE
-            turnDistance.text = ""  // "0m 후" 대신 비우거나 "도착" 등으로 표시
+            turnDistance.text = ""
             turnTypeText.text = "목적지에 도착했습니다"
-
-            // 양쪽 핸들 도착 패턴 시작
-            startArrivalVibration()
         }
     }
-
-    /** 목적지 도착 시: 양쪽 핸들을 짧은 간격으로 3번 울리는 패턴 */
-    private fun startArrivalVibration() {
-        if (!readyToWrite) return
-
-        val handler = Handler(Looper.getMainLooper())
-        var count = 0
-
-        val runnable = object : Runnable {
-            override fun run() {
-                if (count >= 3) {
-                    // 3번 끝
-                    return
-                }
-
-                // 양쪽 핸들을 짧게 한 번씩 진동
-                BluetoothManager.sendText("L")
-                BluetoothManager.sendText("R")
-
-                count++
-                // 다음 사이클까지 간격(0.3초 정도, 원하면 조절)
-                handler.postDelayed(this, 300)
-            }
-        }
-
-        // 바로 첫 사이클 시작
-        handler.post(runnable)
-    }
-
 
     private fun distance(a: LatLng, b: LatLng): Float {
         val arr = FloatArray(1)
@@ -254,47 +202,24 @@ class DrivingActivity : AppCompatActivity(),
         return arr[0]
     }
 
-    private fun sendVibration(type: TurnType) {
-        if (!readyToWrite) return
-
-        when (type) {
-            TurnType.LEFT -> BluetoothManager.sendText("L")
-            TurnType.RIGHT -> BluetoothManager.sendText("R")
-            else -> {}
-        }
-    }
-
-    private fun startRepeating(type: TurnType) {
-        repeatHandler = Handler(Looper.getMainLooper())
-        repeatRunnable = object : Runnable {
-            override fun run() {
-                sendVibration(type)
-                repeatHandler?.postDelayed(this, 2000)
-            }
-        }
-        repeatHandler?.post(repeatRunnable!!)
-    }
-
-    private fun stopRepeating() {
-        repeatRunnable?.let { repeatHandler?.removeCallbacks(it) }
-        isRepeating = false
-    }
-
     override fun onReadyToWrite(ready: Boolean) {
         readyToWrite = ready
-        android.util.Log.d("DrivingActivity_BLE", "readyToWrite = $ready")
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        stopLocationTracking()
+
+        if (!rideSaved) {
+            saveRideData(false)
+        }
+
         BluetoothManager.attachListener(null)
-        stopRepeating()
     }
 
     override fun onMapReady(map: GoogleMap) {
         googleMap = map
 
-        // 위치 권한이 이미 있다면 파란 점(내 위치) 켜기
         if (ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
@@ -303,26 +228,21 @@ class DrivingActivity : AppCompatActivity(),
             googleMap?.isMyLocationEnabled = true
         }
 
-        // 🚗 주행 경로 폴리라인 그리기
         if (routePoints.isNotEmpty()) {
             val polylineOptions = PolylineOptions()
                 .addAll(routePoints)
                 .width(10f)
-                .color(0xFF2196F3.toInt())   // MapsActivity와 동일 색상
+                .color(0xFF2196F3.toInt())
 
             routePolyline = googleMap?.addPolyline(polylineOptions)
 
-            // 처음 진입 시 카메라를 경로 시작 지점 근처로
             googleMap?.moveCamera(
                 CameraUpdateFactory.newLatLngZoom(routePoints.first(), 16f)
             )
         }
     }
 
-    //로그캣 확인용 코드-ble 연결 확인
     override fun onLog(msg: String) {
         android.util.Log.d("DrivingActivity_BLE", msg)
     }
-
-
 }

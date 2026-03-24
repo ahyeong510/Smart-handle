@@ -10,6 +10,9 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.lifecycle.lifecycleScope
+import com.google.android.gms.maps.model.LatLng
+import kotlinx.coroutines.launch
 import androidx.recyclerview.widget.RecyclerView
 import com.example.smart_handle.R
 import com.example.smart_handle.exercise.ExerciseRouteAdapter
@@ -56,13 +59,25 @@ class FitnessRouteFragment : Fragment() {
             return
         }
 
-        val candidates = ExerciseRouteGenerator.generateDummyCandidates(targetDistance)
+        // 지금은 임시 현재 위치
+        val currentLocation = LatLng(37.5665, 126.9780)
 
-        rvRoutes.adapter = ExerciseRouteAdapter(candidates) { selectedRoute ->
-            val intent = Intent(requireContext(), MapsActivity::class.java)
-            intent.putExtra("extra_dest_lat", selectedRoute.destLatLng.latitude)
-            intent.putExtra("extra_dest_lng", selectedRoute.destLatLng.longitude)
-            startActivity(intent)
+        viewLifecycleOwner.lifecycleScope.launch {
+            val candidates = ExerciseRouteGenerator.generateRoutes(
+                startLatLng = currentLocation,
+                targetDistanceKm = targetDistance
+            )
+
+            if (candidates.isEmpty()) {
+                Toast.makeText(requireContext(), "경로를 찾지 못했습니다.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            rvRoutes.adapter = ExerciseRouteAdapter(candidates) { selectedRoute ->
+                val intent = Intent(requireContext(), MapsActivity::class.java)
+                intent.putExtra("extra_dest_lat", selectedRoute.destLatLng.latitude)
+                intent.putExtra("extra_dest_lng", selectedRoute.destLatLng.longitude)
+                startActivity(intent)
+            }
         }
-    }
-}
+    }}

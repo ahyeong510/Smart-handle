@@ -1,6 +1,8 @@
 package com.example.smart_handle.ui.main
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -8,22 +10,26 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import androidx.fragment.app.Fragment
-import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.maps.model.LatLng
-import kotlinx.coroutines.launch
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.smart_handle.R
 import com.example.smart_handle.exercise.ExerciseRouteAdapter
 import com.example.smart_handle.exercise.ExerciseRouteGenerator
 import com.example.smart_handle.maps.MapsActivity
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.maps.model.LatLng
+import kotlinx.coroutines.launch
 
 class FitnessRouteFragment : Fragment() {
 
     private lateinit var etDistance: EditText
     private lateinit var btnGenerateFitness: Button
     private lateinit var rvRoutes: RecyclerView
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -37,6 +43,7 @@ class FitnessRouteFragment : Fragment() {
         rvRoutes = view.findViewById(R.id.rvRoutes)
 
         rvRoutes.layoutManager = LinearLayoutManager(requireContext())
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireContext())
 
         btnGenerateFitness.setOnClickListener {
             generateRouteCandidates()
@@ -59,25 +66,54 @@ class FitnessRouteFragment : Fragment() {
             return
         }
 
-        // 지금은 임시 현재 위치
-        val currentLocation = LatLng(37.5665, 126.9780)
+        getCurrentLocation { currentLocation ->
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            val candidates = ExerciseRouteGenerator.generateRoutes(
-                startLatLng = currentLocation,
-                targetDistanceKm = targetDistance
-            )
-
-            if (candidates.isEmpty()) {
-                Toast.makeText(requireContext(), "경로를 찾지 못했습니다.", Toast.LENGTH_SHORT).show()
-                return@launch
+            if (currentLocation == null) {
+                Toast.makeText(requireContext(), "현재 위치를 가져올 수 없습니다.", Toast.LENGTH_SHORT).show()
+                return@getCurrentLocation
             }
 
-            rvRoutes.adapter = ExerciseRouteAdapter(candidates) { selectedRoute ->
-                val intent = Intent(requireContext(), MapsActivity::class.java)
-                intent.putExtra("extra_dest_lat", selectedRoute.destLatLng.latitude)
-                intent.putExtra("extra_dest_lng", selectedRoute.destLatLng.longitude)
-                startActivity(intent)
+            viewLifecycleOwner.lifecycleScope.launch {
+                val candidates = ExerciseRouteGenerator.generateRoutes(
+                    startLatLng = currentLocation,
+                    targetDistanceKm = targetDistance
+                )
+
+                if (candidates.isEmpty()) {
+                    Toast.makeText(requireContext(), "경로를 찾지 못했습니다.", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                rvRoutes.adapter = ExerciseRouteAdapter(candidates) { selectedRoute ->
+                    val intent = Intent(requireContext(), MapsActivity::class.java)
+                    intent.putExtra("extra_dest_lat", selectedRoute.destLatLng.latitude)
+                    intent.putExtra("extra_dest_lng", selectedRoute.destLatLng.longitude)
+                    startActivity(intent)
+                }
             }
         }
-    }}
+    }
+
+    private fun getCurrentLocation(onResult: (LatLng?) -> Unit) {
+        if (ActivityCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            onResult(null)
+            return
+        }
+
+        fusedLocationClient.lastLocation
+            .addOnSuccessListener { location ->
+                if (location != null) {
+                    onResult(LatLng(location.latitude, location.longitude))
+                } else {
+                    onResult(null)
+                }
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
+    }
+}

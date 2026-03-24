@@ -20,9 +20,10 @@ object ExerciseRouteGenerator {
         val candidates = mutableListOf<ExerciseRouteCandidate>()
 
         for (angle in directions) {
+
             val dest = createDestination(
                 start = startLatLng,
-                distanceKm = targetDistanceKm * 0.75, // 직선거리 보정
+                distanceKm = targetDistanceKm * 0.75, // 보정
                 angle = angle
             )
 
@@ -34,6 +35,7 @@ object ExerciseRouteGenerator {
             )
 
             if (route.points.isNotEmpty()) {
+
                 val distanceKm = calculateRouteDistanceKm(route.points)
                 val estimatedTimeMin = estimateTime(distanceKm)
                 val turnCount = route.turnEvents.size
@@ -56,11 +58,13 @@ object ExerciseRouteGenerator {
         return selectTop4(candidates, targetDistanceKm)
     }
 
+    // 🔥 방향 기반 목적지 생성
     private fun createDestination(
         start: LatLng,
         distanceKm: Double,
         angle: Double
     ): LatLng {
+
         val earthRadius = 6371.0
         val d = distanceKm / earthRadius
 
@@ -84,6 +88,7 @@ object ExerciseRouteGenerator {
         )
     }
 
+    // 🔥 실제 경로 거리 계산
     private fun calculateRouteDistanceKm(points: List<LatLng>): Double {
         if (points.size < 2) return 0.0
 
@@ -106,11 +111,13 @@ object ExerciseRouteGenerator {
         return totalMeters / 1000.0
     }
 
+    // 🔥 시간 계산
     private fun estimateTime(distanceKm: Double): Int {
         val speedKmPerHour = 15.0
         return ((distanceKm / speedKmPerHour) * 60).toInt().coerceAtLeast(1)
     }
 
+    // 🔥 핵심: 4가지 유형 선택
     private fun selectTop4(
         list: List<ExerciseRouteCandidate>,
         target: Double
@@ -121,7 +128,11 @@ object ExerciseRouteGenerator {
         val result = mutableListOf<ExerciseRouteCandidate>()
         val used = mutableSetOf<Int>()
 
-        fun addIfNotUsed(candidate: ExerciseRouteCandidate?, title: String, description: String) {
+        fun addIfNotUsed(
+            candidate: ExerciseRouteCandidate?,
+            title: String,
+            description: String
+        ) {
             if (candidate == null) return
             val index = list.indexOf(candidate)
             if (index in used) return
@@ -135,13 +146,18 @@ object ExerciseRouteGenerator {
             )
         }
 
-        val balanced = list.minByOrNull { kotlin.math.abs(it.distanceKm - target) }
+        val balanced = list.minByOrNull {
+            kotlin.math.abs(it.distanceKm - target)
+        }
+
         val fastest = list
             .filter { it != balanced }
             .minByOrNull { it.estimatedTimeMin }
+
         val simplest = list
             .filter { it != balanced && it != fastest }
             .minByOrNull { it.turnCount }
+
         val mostTurns = list
             .filter { it != balanced && it != fastest && it != simplest }
             .maxByOrNull { it.turnCount }

@@ -16,6 +16,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.smart_handle.R
+import com.example.smart_handle.data.AppDatabase
+import com.example.smart_handle.data.ExerciseRouteLogEntity
 import com.example.smart_handle.exercise.ExerciseRouteAdapter
 import com.example.smart_handle.exercise.ExerciseRouteGenerator
 import com.example.smart_handle.maps.MapsActivity
@@ -30,6 +32,7 @@ class FitnessRouteFragment : Fragment() {
     private lateinit var btnGenerateFitness: Button
     private lateinit var rvRoutes: RecyclerView
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var db: AppDatabase
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -43,7 +46,9 @@ class FitnessRouteFragment : Fragment() {
         rvRoutes = view.findViewById(R.id.rvRoutes)
 
         rvRoutes.layoutManager = LinearLayoutManager(requireContext())
+
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireContext())
+        db = AppDatabase.getDatabase(requireContext())
 
         btnGenerateFitness.setOnClickListener {
             generateRouteCandidates()
@@ -74,6 +79,7 @@ class FitnessRouteFragment : Fragment() {
             }
 
             viewLifecycleOwner.lifecycleScope.launch {
+
                 val candidates = ExerciseRouteGenerator.generateRoutes(
                     startLatLng = currentLocation,
                     targetDistanceKm = targetDistance
@@ -85,6 +91,22 @@ class FitnessRouteFragment : Fragment() {
                 }
 
                 rvRoutes.adapter = ExerciseRouteAdapter(candidates) { selectedRoute ->
+
+                    // 🔥 로그 저장
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        db.exerciseRouteLogDao().insertLog(
+                            ExerciseRouteLogEntity(
+                                targetDistance = targetDistance,
+                                selectedType = selectedRoute.title,
+                                distanceKm = selectedRoute.distanceKm,
+                                estimatedTimeMin = selectedRoute.estimatedTimeMin,
+                                turnCount = selectedRoute.turnCount,
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                    }
+
+                    // 🔥 지도 이동
                     val intent = Intent(requireContext(), MapsActivity::class.java)
                     intent.putExtra("extra_dest_lat", selectedRoute.destLatLng.latitude)
                     intent.putExtra("extra_dest_lng", selectedRoute.destLatLng.longitude)

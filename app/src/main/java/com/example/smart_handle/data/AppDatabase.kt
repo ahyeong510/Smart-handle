@@ -5,10 +5,17 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [RideEntity::class], version = 1)
+@Database(
+    entities = [
+        RideEntity::class,
+        ExerciseRouteLogEntity::class
+    ],
+    version = 2
+)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun rideDao(): RideDao
+    abstract fun exerciseRouteLogDao(): ExerciseRouteLogDao
 
     companion object {
         @Volatile
@@ -20,7 +27,10 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "ride_database"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
+
                 INSTANCE = instance
                 instance
             }

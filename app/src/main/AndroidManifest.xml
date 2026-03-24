@@ -27,7 +27,7 @@
         <!-- ✅ Google 지도 API 키 -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyCW5MXLusoUzLSFiZGdirbZv7V2h6Zazw0" />
+            android:value="AIzaSyCyM3zM82Y55odXNQpd0818EwzlxQUgaZk" />
 
         <!-- ✅ 앱 실행 시 첫 화면 -->
         <activity

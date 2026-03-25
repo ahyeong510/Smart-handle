@@ -5,8 +5,6 @@ import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.View
 import android.widget.Button
 import android.widget.ImageView
@@ -16,18 +14,22 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.smart_handle.R
-import com.example.smart_handle.maps.TurnEvent
-import com.example.smart_handle.maps.TurnType
-import com.example.smart_handle.ui.ble.BluetoothManager
 import com.example.smart_handle.data.AppDatabase
 import com.example.smart_handle.data.RideDao
 import com.example.smart_handle.data.RideEntity
-import com.google.android.gms.location.*
-import com.google.android.gms.maps.model.LatLng
+import com.example.smart_handle.maps.TurnEvent
+import com.example.smart_handle.ui.ble.BluetoothManager
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
 import kotlinx.coroutines.launch
@@ -41,16 +43,15 @@ class DrivingActivity : AppCompatActivity(),
 
     private var googleMap: GoogleMap? = null
     private var currentLatLng: LatLng? = null
+
     private lateinit var turnCard: View
     private lateinit var turnIcon: ImageView
     private lateinit var turnDistance: TextView
     private lateinit var turnTypeText: TextView
 
-    // Room DB
     private lateinit var database: AppDatabase
     private lateinit var rideDao: RideDao
 
-    // 주행 기록용
     private var startTime: Long = 0L
     private var totalDistanceMeters: Float = 0f
     private var lastLocation: Location? = null
@@ -58,12 +59,14 @@ class DrivingActivity : AppCompatActivity(),
 
     private var readyToWrite = false
     private var turnEvents: MutableList<TurnEvent> = mutableListOf()
-    private var nextTurnIndex = 0
-
     private var isArrivalNotified = false
 
     private val routePoints = mutableListOf<LatLng>()
     private var routePolyline: Polyline? = null
+
+    // 운동탭에서 넘겨받는 값
+    private var exerciseLogId: Int = -1
+    private var expectedDistanceKm: Double = 0.0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,6 +76,10 @@ class DrivingActivity : AppCompatActivity(),
         rideDao = database.rideDao()
 
         startTime = System.currentTimeMillis()
+
+        // 운동탭 선택 로그 연결용
+        exerciseLogId = intent.getIntExtra("exercise_log_id", -1)
+        expectedDistanceKm = intent.getDoubleExtra("expected_distance_km", 0.0)
 
         val mapFragment = supportFragmentManager
             .findFragmentById(R.id.drive_map) as SupportMapFragment
@@ -104,25 +111,41 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     private fun saveRideData(isCompleted: Boolean) {
-
         if (rideSaved) return
         rideSaved = true
 
         val endTime = System.currentTimeMillis()
-        val durationSeconds = (endTime - startTime) / 1000
+        val durationSec = ((endTime - startTime) / 1000).toInt()
         val distanceKm = totalDistanceMeters / 1000.0
+
+        val avgSpeed = if (durationSec > 0) {
+            distanceKm / (durationSec / 3600.0)
+        } else {
+            0.0
+        }
+
+        val completionRatio = if (expectedDistanceKm > 0.0) {
+            (distanceKm / expectedDistanceKm).coerceIn(0.0, 1.0)
+        } else {
+            0.0
+        }
 
         lifecycleScope.launch {
             val ride = RideEntity(
-                distance = distanceKm,
-                duration = durationSeconds,
-                elevationGain = 0.0,
+                distanceKm = distanceKm,
+                durationSec = durationSec,
+                avgSpeed = avgSpeed,
                 completed = isCompleted,
-                date = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                exerciseLogId = if (exerciseLogId != -1) exerciseLogId else null,
+                completionRatio = completionRatio
             )
 
             rideDao.insertRide(ride)
-            android.util.Log.d("DB_SAVE", "저장 완료: $distanceKm km")
+            android.util.Log.d(
+                "DB_SAVE",
+                "저장 완료: ${distanceKm}km, duration=${durationSec}s, completion=$completionRatio"
+            )
         }
     }
 
@@ -146,14 +169,13 @@ class DrivingActivity : AppCompatActivity(),
 
     @SuppressLint("MissingPermission")
     private fun startLocationTracking() {
-
         googleMap?.isMyLocationEnabled = true
 
         locationRequest = LocationRequest.Builder(700)
             .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
             .build()
 
-        fused.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
+        fused.requestLocationUpdates(locationRequest, locationCallback, mainLooper)
     }
 
     private val locationCallback = object : LocationCallback() {
@@ -177,14 +199,12 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     private fun checkArrival(current: LatLng) {
-
         if (isArrivalNotified || turnEvents.isEmpty()) return
 
         val destination = turnEvents.last().location
         val distToDest = distance(current, destination)
 
         if (distToDest <= 20f) {
-
             stopLocationTracking()
             saveRideData(true)
 

@@ -8,7 +8,7 @@ import androidx.room.Query
 interface ExerciseRouteLogDao {
 
     @Insert
-    suspend fun insertLog(log: ExerciseRouteLogEntity)
+    suspend fun insertLog(log: ExerciseRouteLogEntity): Long   // 🔥 중요
 
     @Query("SELECT * FROM exercise_route_log")
     suspend fun getAllLogs(): List<ExerciseRouteLogEntity>

@@ -92,9 +92,9 @@ class FitnessRouteFragment : Fragment() {
 
                 rvRoutes.adapter = ExerciseRouteAdapter(candidates) { selectedRoute ->
 
-                    // 🔥 로그 저장
                     viewLifecycleOwner.lifecycleScope.launch {
-                        db.exerciseRouteLogDao().insertLog(
+
+                        val logId = db.exerciseRouteLogDao().insertLog(
                             ExerciseRouteLogEntity(
                                 targetDistance = targetDistance,
                                 selectedType = selectedRoute.title,
@@ -104,13 +104,15 @@ class FitnessRouteFragment : Fragment() {
                                 timestamp = System.currentTimeMillis()
                             )
                         )
-                    }
 
-                    // 🔥 지도 이동
-                    val intent = Intent(requireContext(), MapsActivity::class.java)
-                    intent.putExtra("extra_dest_lat", selectedRoute.destLatLng.latitude)
-                    intent.putExtra("extra_dest_lng", selectedRoute.destLatLng.longitude)
-                    startActivity(intent)
+                        val intent = Intent(requireContext(), MapsActivity::class.java)
+                        intent.putExtra("extra_dest_lat", selectedRoute.destLatLng.latitude)
+                        intent.putExtra("extra_dest_lng", selectedRoute.destLatLng.longitude)
+                        intent.putExtra("exercise_log_id", logId.toInt())
+                        intent.putExtra("expected_distance_km", selectedRoute.distanceKm)
+
+                        startActivity(intent)
+                    }
                 }
             }
         }

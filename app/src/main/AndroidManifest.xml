@@ -22,7 +22,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SmartHandle"
-        android:enableOnBackInvokedCallback="true">
+        android:enableOnBackInvokedCallback="true"
+        android:usesCleartextTraffic="true">
 
         <!-- ✅ Google 지도 API 키 -->
         <meta-data
@@ -64,6 +65,7 @@
 
         <!-- ✅ 지도 화면 -->
         <activity android:name=".maps.MapsActivity" />
+        <activity android:name=".ui.fitness.FitnessRecommendResultActivity" />
 
     </application>
 

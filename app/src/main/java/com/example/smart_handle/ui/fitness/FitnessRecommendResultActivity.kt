@@ -113,9 +113,12 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
 
         repo.insertRoute(slope, congestion, turnCount, duration, 1)
 
-        val intent = Intent(this, DrivingActivity::class.java)
+        val intent = Intent(this, FitnessDrivingActivity::class.java)
+
+        intent.putExtra("routeType", "fitness") // ⭐ 운동탭 표시용
         intent.putParcelableArrayListExtra("turn_events", turnEvents)
         intent.putParcelableArrayListExtra("route_points", latLngPoints)
+
         startActivity(intent)
     }
 }

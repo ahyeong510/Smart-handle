@@ -10,8 +10,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.smart_handle.MainActivity
 import com.example.smart_handle.R
+import com.example.smart_handle.auth.LoginActivity   // ⭐ 추가
 
 class PermissionActivity : AppCompatActivity() {
 
@@ -36,42 +36,27 @@ class PermissionActivity : AppCompatActivity() {
         btnDone.isEnabled = false
         btnDone.alpha = 0.5f
 
-        // 🔹 위치 권한 버튼
-        btnLocation.setOnClickListener {
-            requestLocationPermission()
-        }
+        btnLocation.setOnClickListener { requestLocationPermission() }
+        btnBluetooth.setOnClickListener { requestBluetoothPermission() }
 
-        // 🔹 블루투스 권한 버튼
-        btnBluetooth.setOnClickListener {
-            requestBluetoothPermission()
-        }
-
-        // 🔹 완료 버튼
         btnDone.setOnClickListener {
             if (locationGranted && bluetoothGranted) {
-                try {
-                    val intent = Intent(this@PermissionActivity, MainActivity::class.java)
-                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                    startActivity(intent)
-                    finish()
-                } catch (e: Exception) {
-                    Toast.makeText(this, "화면 전환 중 오류 발생", Toast.LENGTH_SHORT).show()
-                    e.printStackTrace()
-                }
+                val intent = Intent(this, LoginActivity::class.java)  // ⭐ 변경
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
             } else {
                 Toast.makeText(this, "모든 권한을 허용해주세요.", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    // ✅ 위치 권한 요청
     private fun requestLocationPermission() {
         val permissions = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
         )
 
-        // 이미 허용된 경우
         if (permissions.all {
                 ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
             }) {
@@ -85,7 +70,6 @@ class PermissionActivity : AppCompatActivity() {
         ActivityCompat.requestPermissions(this, permissions, REQUEST_LOCATION)
     }
 
-    // ✅ 블루투스 권한 요청 (버전별 대응)
     private fun requestBluetoothPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val permissions = arrayOf(
@@ -112,7 +96,6 @@ class PermissionActivity : AppCompatActivity() {
         }
     }
 
-    // ✅ 권한 요청 결과 처리
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -145,7 +128,6 @@ class PermissionActivity : AppCompatActivity() {
         updateDoneButtonState()
     }
 
-    // ✅ 완료 버튼 활성화 여부
     private fun updateDoneButtonState() {
         if (locationGranted && bluetoothGranted) {
             btnDone.isEnabled = true

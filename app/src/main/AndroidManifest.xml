@@ -67,6 +67,11 @@
         <activity android:name=".maps.MapsActivity" />
         <activity android:name=".ui.fitness.FitnessRecommendResultActivity" />
 
+        <activity android:name=".auth.SignupActivity" />
+        <activity android:name=".auth.LoginActivity" />
+
+        <activity android:name=".history.HistoryActivity" />
+
     </application>
 
 </manifest>

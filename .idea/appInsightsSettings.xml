@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.example.smart_handle" />
+                  <option name="mobileSdkAppId" value="1:903242907103:android:53fe1b2628cf7c3f26986a" />
+                  <option name="projectId" value="smart-handle-project" />
+                  <option name="projectNumber" value="903242907103" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

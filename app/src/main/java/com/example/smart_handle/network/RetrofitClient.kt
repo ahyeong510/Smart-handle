@@ -5,9 +5,8 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitClient {
 
-    // 에뮬레이터에서 PC 로컬 서버 접속할 때:
-    // 10.0.2.2 = 내 컴퓨터 localhost
-    private const val BASE_URL = "http://192.168.219.105:8000/"
+    // ⭐ 현재 PC IP로 변경
+    private const val BASE_URL = "http://192.168.0.34:8000/"
 
     val fitnessApi: FitnessApiService by lazy {
         Retrofit.Builder()

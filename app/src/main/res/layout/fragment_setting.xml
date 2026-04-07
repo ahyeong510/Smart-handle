@@ -10,6 +10,15 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
+        <TextView
+            android:id="@+id/tvUserEmail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="로그인: -"
+            android:textSize="14sp"
+            android:textColor="#555555"
+            android:layout_marginBottom="10dp"/>
+
         <!-- 진동 거리 임계값 -->
         <TextView
             android:id="@+id/distanceText"
@@ -54,7 +63,6 @@
             android:padding="12dp"
             android:layout_marginTop="25dp"
             android:layout_marginBottom="10dp"
-            android:backgroundTintMode="src_in"
             android:elevation="2dp">
 
             <TextView
@@ -73,6 +81,22 @@
                 android:textSize="14sp"
                 android:textColor="#333333" />
         </LinearLayout>
+
+        <!-- ⭐ 주행 기록 버튼 -->
+        <Button
+            android:id="@+id/btnHistory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="주행 기록 보기"
+            android:layout_marginTop="30dp" />
+
+        <!-- ⭐ 로그아웃 버튼 -->
+        <Button
+            android:id="@+id/btnLogout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="로그아웃"
+            android:layout_marginTop="10dp" />
 
     </LinearLayout>
 </ScrollView>

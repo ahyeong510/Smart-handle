@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "903242907103",
+    "project_id": "smart-handle-project",
+    "storage_bucket": "smart-handle-project.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:903242907103:android:53fe1b2628cf7c3f26986a",
+        "android_client_info": {
+          "package_name": "com.example.smart_handle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAz2vF7ACIYQUHD0LBu_JttuHZu0MGhJs4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,4 +1,4 @@
-package com.example.smart_handle.history
+package com.example.smart_handle.ui.fitness
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity

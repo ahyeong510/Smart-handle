@@ -13,7 +13,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.example.smart_handle.R
 import com.example.smart_handle.auth.LoginActivity
-import com.example.smart_handle.data.RideHistory
+import com.example.smart_handle.ui.fitness.RideHistory
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -120,15 +120,31 @@ class SettingFragment : Fragment() {
                 }
 
                 val items = historyList.mapIndexed { index, item ->
-                    val minutes = item.durationSec / 60
-                    val satisfactionText = item.satisfaction ?: "-"
                     val routeTypeText = when (item.routeType) {
                         "fitness" -> "운동"
                         "navigation" -> "길찾기"
                         else -> item.routeType
                     }
 
-                    "${index + 1}. [$routeTypeText] ${String.format("%.2f", item.distanceKm)} km / ${minutes}분 / 만족도: $satisfactionText"
+                    val durationMin = when {
+                        item.actualDurationSec > 0L -> item.actualDurationSec / 60
+                        item.durationSec > 0L -> item.durationSec / 60
+                        else -> 0L
+                    }
+
+                    val distanceText = when {
+                        item.effectiveDistanceKm > 0.0 -> String.format("%.2f", item.effectiveDistanceKm)
+                        item.distanceKm > 0.0 -> String.format("%.2f", item.distanceKm)
+                        else -> "0.00"
+                    }
+
+                    val satisfactionText = item.satisfaction ?: "-"
+                    val percentText =
+                        if (item.riddenPercent > 0) "${item.riddenPercent}%" else "-"
+                    val completionText =
+                        if (item.isCompleted) "완주" else "중도 종료"
+
+                    "${index + 1}. [$routeTypeText] ${distanceText} km / ${durationMin}분 / 만족도: $satisfactionText / 주행비율: $percentText / $completionText"
                 }.toTypedArray()
 
                 AlertDialog.Builder(requireContext())

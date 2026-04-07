@@ -8,12 +8,11 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.smart_handle.R
+import com.example.smart_handle.database.RouteRepository
 import com.example.smart_handle.maps.TurnEvent
 import com.example.smart_handle.maps.TurnType
 import com.example.smart_handle.ml.FeatureExtractor
-import com.example.smart_handle.ui.driving.DrivingActivity
 import com.google.android.gms.maps.model.LatLng
-import com.example.smart_handle.database.RouteRepository
 
 class FitnessRecommendResultActivity : AppCompatActivity() {
 
@@ -98,26 +97,36 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
             )
         }
 
-        val repo = RouteRepository(this)
+        val turnCount = FeatureExtractor.calculateTurnCount(latLngPoints)
         val slope = route.elevationGain.toDouble()
 
         val congestion = when (route.congestionText) {
             "낮음" -> 0.2
             "중간" -> 0.5
-            else -> 0.8
+            "높음" -> 0.8
+            else -> 0.5
         }
 
         val duration = route.durationMin.toDouble()
 
-        val turnCount = FeatureExtractor.calculateTurnCount(latLngPoints)
-
+        val repo = RouteRepository(this)
         repo.insertRoute(slope, congestion, turnCount, duration, 1)
 
-        val intent = Intent(this, FitnessDrivingActivity::class.java)
+        val intent = Intent(this, FitnessDrivingActivity::class.java).apply {
+            putExtra("routeType", "fitness")
+            putParcelableArrayListExtra("turn_events", turnEvents)
+            putParcelableArrayListExtra("route_points", latLngPoints)
 
-        intent.putExtra("routeType", "fitness") // ⭐ 운동탭 표시용
-        intent.putParcelableArrayListExtra("turn_events", turnEvents)
-        intent.putParcelableArrayListExtra("route_points", latLngPoints)
+            // 추천된 경로 feature 전달
+            putExtra("routeTitle", route.title)
+            putExtra("plannedDistanceKm", route.distanceKm)
+            putExtra("plannedDurationMin", route.durationMin)
+            putExtra("elevationGain", route.elevationGain)
+            putExtra("turnCount", turnCount)
+            putExtra("congestionText", route.congestionText)
+            putExtra("congestionScore", congestion)
+            putExtra("routeScore", route.score)
+        }
 
         startActivity(intent)
     }

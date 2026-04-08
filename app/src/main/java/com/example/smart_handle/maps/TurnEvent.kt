@@ -13,7 +13,8 @@ enum class TurnType {
 
 data class TurnEvent(
     val location: LatLng,     // 턴 위치 (위도/경도)
-    val type: TurnType,       // 턴 종류
+    val type: TurnType,
+    var isContinuous: Boolean = false,// 턴 종류
     var trigger50: Boolean = false,  // 50m 알림 했는지
     var trigger25: Boolean = false   // 25m 알림 했는지
 ) : Parcelable {

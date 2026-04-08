@@ -5,18 +5,8 @@ import com.google.android.gms.maps.model.LatLng
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Kakao Directions API의 JSON을 분석해
- * 회전(turn) 지점을 TurnEvent 리스트로 추출하는 클래스.
- *
- * -> MapDirectionHelper에서 받은 body(JSON 문자열)를 넘겨서 처리한다.
- */
 object KakaoTurnExtractor {
 
-    /**
-     * @param jsonBody Kakao Directions API 전체 JSON 문자열
-     * @return List<TurnEvent>  (좌회전/우회전/직진 등 포함)
-     */
     fun extractTurnEvents(jsonBody: String): List<TurnEvent> {
         val results = ArrayList<TurnEvent>()
 
@@ -28,7 +18,6 @@ object KakaoTurnExtractor {
             val firstRoute = routes.getJSONObject(0)
             val sections = firstRoute.optJSONArray("sections") ?: JSONArray()
 
-            // sections[].guides[] 안에 회전 안내가 있음
             for (i in 0 until sections.length()) {
                 val sec = sections.getJSONObject(i)
                 val guides = sec.optJSONArray("guides") ?: JSONArray()
@@ -36,9 +25,9 @@ object KakaoTurnExtractor {
                 for (g in 0 until guides.length()) {
                     val gObj = guides.getJSONObject(g)
 
-                    val lat = gObj.optDouble("y")   // 위도
-                    val lng = gObj.optDouble("x")   // 경도
-                    val maneuver = gObj.optString("guidance") // ex) "좌회전", "우회전", "직진"
+                    val lat = gObj.optDouble("y")
+                    val lng = gObj.optDouble("x")
+                    val maneuver = gObj.optString("guidance")
 
                     val turnType = when {
                         maneuver.contains("좌") -> TurnType.LEFT
@@ -60,6 +49,39 @@ object KakaoTurnExtractor {
             Log.e("TurnExtractor", "extractTurnEvents error: ${e.message}", e)
         }
 
-        return results
+        // 🔥 여기 핵심 변경
+        return markContinuousTurns(results)
+    }
+
+    // 🔥 거리 계산 함수
+    private fun distanceMeters(a: LatLng, b: LatLng): Float {
+        val result = FloatArray(1)
+        android.location.Location.distanceBetween(
+            a.latitude, a.longitude,
+            b.latitude, b.longitude,
+            result
+        )
+        return result[0]
+    }
+
+    // 🔥 연속 좌/우회전 판별
+    private fun markContinuousTurns(events: List<TurnEvent>): List<TurnEvent> {
+        if (events.size < 2) return events
+
+        for (i in 0 until events.size - 1) {
+            val current = events[i]
+            val next = events[i + 1]
+
+            val sameDirection =
+                (current.type == TurnType.LEFT && next.type == TurnType.LEFT) ||
+                        (current.type == TurnType.RIGHT && next.type == TurnType.RIGHT)
+
+            val closeDistance = distanceMeters(current.location, next.location) <= 35f
+
+            if (sameDirection && closeDistance) {
+                current.isContinuous = true
+            }
+        }
+        return events
     }
 }

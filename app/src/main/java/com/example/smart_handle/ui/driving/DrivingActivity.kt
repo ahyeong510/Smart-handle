@@ -42,6 +42,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import android.util.Log
 
 class DrivingActivity : AppCompatActivity(),
     BluetoothManager.Listener,
@@ -89,6 +90,8 @@ class DrivingActivity : AppCompatActivity(),
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driving_navigation)
+
+        Log.d("VIBRATION", "🔥 DrivingActivity started")
 
         database = AppDatabase.getDatabase(this)
         rideDao = database.rideDao()
@@ -349,18 +352,18 @@ class DrivingActivity : AppCompatActivity(),
         }
 
         if (!target.trigger50 && dist < 50 && dist >= 25) {
-            sendVibration(target.type)
+            sendVibration(target.type, target.isContinuous)
             target.trigger50 = true
         }
 
         if (!target.trigger25 && dist < 25 && dist >= 10) {
-            sendVibration(target.type)
+            sendVibration(target.type, target.isContinuous)
             target.trigger25 = true
         }
 
         if (dist < 10 && dist >= 3) {
             if (!isRepeating) {
-                startRepeating(target.type)
+                startRepeating(target.type, target.isContinuous)
                 isRepeating = true
             }
         }
@@ -403,21 +406,39 @@ class DrivingActivity : AppCompatActivity(),
         handler.post(runnable)
     }
 
-    private fun sendVibration(type: TurnType) {
+    private fun sendVibration(type: TurnType, isContinuous: Boolean) {
         if (!readyToWrite) return
 
         when (type) {
-            TurnType.LEFT -> BluetoothManager.sendText("L")
-            TurnType.RIGHT -> BluetoothManager.sendText("R")
+            TurnType.LEFT -> {
+                if (isContinuous) {
+                    Log.d("VIBRATION", "LC")
+                    BluetoothManager.sendText("LC")   // 🔥 연속 좌회전
+                } else {
+                    Log.d("VIBRATION", "L")
+                    BluetoothManager.sendText("L")
+                }
+            }
+
+            TurnType.RIGHT -> {
+                if (isContinuous) {
+                    Log.d("VIBRATION", "RC")
+                    BluetoothManager.sendText("RC")   // 🔥 연속 우회전
+                } else {
+                    Log.d("VIBRATION", "R")
+                    BluetoothManager.sendText("R")
+                }
+            }
+
             TurnType.STRAIGHT -> {}
         }
     }
 
-    private fun startRepeating(type: TurnType) {
+    private fun startRepeating(type: TurnType, isContinuous: Boolean) {
         repeatHandler = Handler(Looper.getMainLooper())
         repeatRunnable = object : Runnable {
             override fun run() {
-                sendVibration(type)
+                sendVibration(type, isContinuous)
                 repeatHandler?.postDelayed(this, 2000)
             }
         }

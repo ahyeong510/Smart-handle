@@ -6,6 +6,7 @@ import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
+import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.Button
@@ -21,6 +22,7 @@ import com.example.smart_handle.data.AppDatabase
 import com.example.smart_handle.data.RideDao
 import com.example.smart_handle.data.RideEntity
 import com.example.smart_handle.maps.TurnEvent
+import com.example.smart_handle.maps.TurnType
 import com.example.smart_handle.ui.ble.BluetoothManager
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -39,6 +41,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 class DrivingActivity : AppCompatActivity(),
     BluetoothManager.Listener,
@@ -71,7 +74,12 @@ class DrivingActivity : AppCompatActivity(),
 
     private var readyToWrite = false
     private var turnEvents: MutableList<TurnEvent> = mutableListOf()
+    private var nextTurnIndex = 0
     private var isArrivalNotified = false
+
+    private var repeatHandler: Handler? = null
+    private var repeatRunnable: Runnable? = null
+    private var isRepeating = false
 
     private val routePoints = mutableListOf<LatLng>()
     private var routePolyline: Polyline? = null
@@ -213,6 +221,7 @@ class DrivingActivity : AppCompatActivity(),
         if (rideFinished) return
         rideFinished = true
 
+        stopRepeating()
         stopLocationTracking()
         saveRideToRoom(true)
 
@@ -227,6 +236,7 @@ class DrivingActivity : AppCompatActivity(),
         if (rideFinished) return
         rideFinished = true
 
+        stopRepeating()
         stopLocationTracking()
         saveRideToRoom(true)
 
@@ -235,6 +245,8 @@ class DrivingActivity : AppCompatActivity(),
         turnCard.visibility = View.VISIBLE
         turnDistance.text = ""
         turnTypeText.text = "목적지에 도착했습니다"
+
+        startArrivalVibration()
 
         if (isFitnessRoute()) {
             showSatisfactionDialog()
@@ -296,11 +308,66 @@ class DrivingActivity : AppCompatActivity(),
             val here = LatLng(loc.latitude, loc.longitude)
             currentLatLng = here
 
+            checkTurnEvent(here)
             checkArrival(here)
 
             googleMap?.animateCamera(
                 CameraUpdateFactory.newLatLngZoom(here, 17f)
             )
+        }
+    }
+
+    private fun checkTurnEvent(current: LatLng) {
+        if (rideFinished) return
+
+        if (nextTurnIndex >= turnEvents.size) {
+            if (!isArrivalNotified) {
+                turnCard.visibility = View.GONE
+            }
+            return
+        }
+
+        val target = turnEvents[nextTurnIndex]
+        val dist = distance(current, target.location)
+        val displayDist = dist.roundToInt()
+
+        turnCard.visibility = View.VISIBLE
+        turnDistance.text = "${displayDist}m 후"
+
+        when (target.type) {
+            TurnType.LEFT -> {
+                turnIcon.setImageResource(R.drawable.ic_turn_left)
+                turnTypeText.text = "좌회전"
+            }
+            TurnType.RIGHT -> {
+                turnIcon.setImageResource(R.drawable.ic_turn_right)
+                turnTypeText.text = "우회전"
+            }
+            TurnType.STRAIGHT -> {
+                turnTypeText.text = "직진"
+            }
+        }
+
+        if (!target.trigger50 && dist < 50 && dist >= 25) {
+            sendVibration(target.type)
+            target.trigger50 = true
+        }
+
+        if (!target.trigger25 && dist < 25 && dist >= 10) {
+            sendVibration(target.type)
+            target.trigger25 = true
+        }
+
+        if (dist < 10 && dist >= 3) {
+            if (!isRepeating) {
+                startRepeating(target.type)
+                isRepeating = true
+            }
+        }
+
+        if (dist < 3) {
+            stopRepeating()
+            nextTurnIndex++
         }
     }
 
@@ -315,6 +382,55 @@ class DrivingActivity : AppCompatActivity(),
         }
     }
 
+    private fun startArrivalVibration() {
+        if (!readyToWrite) return
+
+        val handler = Handler(Looper.getMainLooper())
+        var count = 0
+
+        val runnable = object : Runnable {
+            override fun run() {
+                if (count >= 3) return
+
+                BluetoothManager.sendText("L")
+                BluetoothManager.sendText("R")
+
+                count++
+                handler.postDelayed(this, 300)
+            }
+        }
+
+        handler.post(runnable)
+    }
+
+    private fun sendVibration(type: TurnType) {
+        if (!readyToWrite) return
+
+        when (type) {
+            TurnType.LEFT -> BluetoothManager.sendText("L")
+            TurnType.RIGHT -> BluetoothManager.sendText("R")
+            TurnType.STRAIGHT -> {}
+        }
+    }
+
+    private fun startRepeating(type: TurnType) {
+        repeatHandler = Handler(Looper.getMainLooper())
+        repeatRunnable = object : Runnable {
+            override fun run() {
+                sendVibration(type)
+                repeatHandler?.postDelayed(this, 2000)
+            }
+        }
+        repeatHandler?.post(repeatRunnable!!)
+    }
+
+    private fun stopRepeating() {
+        repeatRunnable?.let { repeatHandler?.removeCallbacks(it) }
+        repeatRunnable = null
+        repeatHandler = null
+        isRepeating = false
+    }
+
     private fun distance(a: LatLng, b: LatLng): Float {
         val arr = FloatArray(1)
         Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, arr)
@@ -327,6 +443,8 @@ class DrivingActivity : AppCompatActivity(),
 
     override fun onDestroy() {
         super.onDestroy()
+
+        stopRepeating()
         stopLocationTracking()
 
         if (!roomSaved) {

@@ -8,12 +8,11 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.smart_handle.R
+import com.example.smart_handle.database.RouteRepository
 import com.example.smart_handle.maps.TurnEvent
 import com.example.smart_handle.maps.TurnType
 import com.example.smart_handle.ml.FeatureExtractor
-import com.example.smart_handle.ui.driving.DrivingActivity
 import com.google.android.gms.maps.model.LatLng
-import com.example.smart_handle.database.RouteRepository
 
 class FitnessRecommendResultActivity : AppCompatActivity() {
 
@@ -98,7 +97,6 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
             )
         }
 
-        val repo = RouteRepository(this)
         val slope = route.elevationGain.toDouble()
 
         val congestion = when (route.congestionText) {
@@ -108,14 +106,21 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
         }
 
         val duration = route.durationMin.toDouble()
-
         val turnCount = FeatureExtractor.calculateTurnCount(latLngPoints)
 
+        val repo = RouteRepository(this)
         repo.insertRoute(slope, congestion, turnCount, duration, 1)
 
         val intent = Intent(this, FitnessDrivingActivity::class.java)
 
-        intent.putExtra("routeType", "fitness") // ⭐ 운동탭 표시용
+        intent.putExtra("routeType", "fitness")
+        intent.putExtra("routeId", route.routeId)
+        intent.putExtra("distanceKm", route.distanceKm)
+        intent.putExtra("durationMin", route.durationMin)
+        intent.putExtra("elevationGain", route.elevationGain)
+        intent.putExtra("congestionText", route.congestionText)
+        intent.putExtra("turnCount", turnCount)
+
         intent.putParcelableArrayListExtra("turn_events", turnEvents)
         intent.putParcelableArrayListExtra("route_points", latLngPoints)
 

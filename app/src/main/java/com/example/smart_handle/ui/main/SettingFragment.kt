@@ -13,7 +13,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.example.smart_handle.R
 import com.example.smart_handle.auth.LoginActivity
-import com.example.smart_handle.data.RideHistory
+import com.example.smart_handle.ui.fitness.RideHistory
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -105,7 +105,7 @@ class SettingFragment : Fragment() {
                 val historyList = result.documents.mapNotNull { doc ->
                     try {
                         doc.toObject(RideHistory::class.java)
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         null
                     }
                 }
@@ -120,7 +120,6 @@ class SettingFragment : Fragment() {
                 }
 
                 val items = historyList.mapIndexed { index, item ->
-                    val minutes = item.durationSec / 60
                     val satisfactionText = item.satisfaction ?: "-"
                     val routeTypeText = when (item.routeType) {
                         "fitness" -> "운동"
@@ -128,7 +127,23 @@ class SettingFragment : Fragment() {
                         else -> item.routeType
                     }
 
-                    "${index + 1}. [$routeTypeText] ${String.format("%.2f", item.distanceKm)} km / ${minutes}분 / 만족도: $satisfactionText"
+                    val durationText = if (item.actualDurationSec > 0) {
+                        "${item.actualDurationSec / 60}분"
+                    } else {
+                        "${item.durationMin}분"
+                    }
+
+                    val completionText = if (item.completionPercent > 0) {
+                        " / 주행률: ${item.completionPercent}%"
+                    } else {
+                        ""
+                    }
+
+                    "${index + 1}. [$routeTypeText] " +
+                            "${String.format("%.2f", item.distanceKm)} km / " +
+                            "$durationText / " +
+                            "만족도: $satisfactionText" +
+                            completionText
                 }.toTypedArray()
 
                 AlertDialog.Builder(requireContext())

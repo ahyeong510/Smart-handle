@@ -23,6 +23,7 @@ import com.example.smart_handle.ui.fitness.FitnessRouteOption
 import com.example.smart_handle.ui.fitness.RoutePointData
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.google.firebase.auth.FirebaseAuth
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -106,6 +107,12 @@ class FitnessRouteFragment : Fragment() {
             return
         }
 
+        val user = FirebaseAuth.getInstance().currentUser
+        if (user == null) {
+            Toast.makeText(requireContext(), "로그인 정보가 없습니다. 다시 로그인해주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         val fineGranted = ActivityCompat.checkSelfPermission(
             requireContext(),
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -128,16 +135,20 @@ class FitnessRouteFragment : Fragment() {
                     return@addOnSuccessListener
                 }
 
-                requestFitnessRoutes(location, targetKm)
+                requestFitnessRoutes(
+                    userId = user.uid,
+                    location = location,
+                    targetKm = targetKm
+                )
             }
             .addOnFailureListener {
                 Toast.makeText(requireContext(), "위치 조회 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
             }
     }
 
-    private fun requestFitnessRoutes(location: Location, targetKm: Double) {
+    private fun requestFitnessRoutes(userId: String, location: Location, targetKm: Double) {
         val request = FitnessRecommendRequest(
-            user_id = "user_001",
+            user_id = userId,
             start_lat = location.latitude,
             start_lng = location.longitude,
             target_km = targetKm

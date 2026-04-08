@@ -5,9 +5,9 @@ import android.os.Bundle
 import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
 import com.example.smart_handle.R
+import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.android.gms.maps.model.LatLng
 
 class FitnessDrivingActivity : AppCompatActivity() {
 
@@ -29,7 +29,8 @@ class FitnessDrivingActivity : AppCompatActivity() {
         val routePoints =
             intent.getParcelableArrayListExtra<LatLng>("route_points") ?: arrayListOf()
 
-        // 👉 TODO: 지도에 polyline 표시 (이미 DrivingActivity에서 했던 방식 가져오면 됨)
+        // 필요하면 나중에 지도 polyline 표시 추가
+        // 현재는 route_points만 받아두는 상태
 
         btnStart.setOnClickListener {
             isDriving = true
@@ -49,19 +50,56 @@ class FitnessDrivingActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("운동 만족도")
             .setItems(options) { _, which ->
-                val selected = options[which]
-                saveToFirestore(selected)
+                val selectedSatisfaction = options[which]
+                showCompletionPercentDialog(selectedSatisfaction)
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun showCompletionPercentDialog(satisfaction: String) {
+        val percentOptions = arrayOf("25%", "50%", "75%", "100%")
+        val percentValues = arrayOf(25, 50, 75, 100)
+
+        AlertDialog.Builder(this)
+            .setTitle("얼마나 탔나요?")
+            .setItems(percentOptions) { _, which ->
+                val completionPercent = percentValues[which]
+                saveToFirestore(satisfaction, completionPercent)
                 finish()
             }
             .setCancelable(false)
             .show()
     }
 
-    private fun saveToFirestore(satisfaction: String) {
+    private fun saveToFirestore(satisfaction: String, completionPercent: Int) {
         val user = FirebaseAuth.getInstance().currentUser ?: return
 
+        val routeType = intent.getStringExtra("routeType") ?: "fitness"
+        val routeId = intent.getStringExtra("routeId") ?: ""
+        val distanceKm = intent.getDoubleExtra("distanceKm", 0.0)
+        val durationMin = intent.getIntExtra("durationMin", 0)
+        val elevationGain = intent.getIntExtra("elevationGain", 0)
+        val congestionText = intent.getStringExtra("congestionText") ?: "중간"
+        val turnCount = intent.getIntExtra("turnCount", 0)
+
+        val actualDurationSec = if (startTime > 0L) {
+            (System.currentTimeMillis() - startTime) / 1000
+        } else {
+            0L
+        }
+
         val data = hashMapOf(
+            "routeType" to routeType,
+            "routeId" to routeId,
+            "distanceKm" to distanceKm,
+            "durationMin" to durationMin,
+            "elevationGain" to elevationGain,
+            "congestionText" to congestionText,
+            "turnCount" to turnCount,
+            "completionPercent" to completionPercent,
             "satisfaction" to satisfaction,
+            "actualDurationSec" to actualDurationSec,
             "createdAt" to System.currentTimeMillis()
         )
 

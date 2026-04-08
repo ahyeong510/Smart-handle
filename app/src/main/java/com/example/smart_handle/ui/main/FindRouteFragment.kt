@@ -1,8 +1,9 @@
 package com.example.smart_handle.ui.main
 
-import android.app.Activity
+import android.Manifest
 import android.content.Intent
-import android.location.Geocoder
+import android.content.pm.PackageManager
+import android.location.Location
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -11,36 +12,36 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.lifecycleScope
 import com.example.smart_handle.R
-import com.example.smart_handle.mapselect.SelectLocationActivity
-import com.example.smart_handle.maps.MapsActivity
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.util.Locale
+import com.example.smart_handle.network.FitnessRecommendResponse
+import com.example.smart_handle.network.RetrofitClient
+import com.example.smart_handle.ui.fitness.FitnessRecommendResultActivity
+import com.example.smart_handle.ui.fitness.FitnessRouteOption
+import com.example.smart_handle.ui.fitness.RoutePointData
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
-class FindRouteFragment : Fragment() {
+class FitnessRouteFragment : Fragment() {
 
-    // 지도 화면에서 선택한 목적지 좌표를 받아오는 런처
-    private val selectDestLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { res ->
-        if (res.resultCode == Activity.RESULT_OK) {
-            val data = res.data
-            val lat = data?.getDoubleExtra("extra_dest_lat", Double.NaN) ?: Double.NaN
-            val lng = data?.getDoubleExtra("extra_dest_lng", Double.NaN) ?: Double.NaN
+    private lateinit var etDistance: EditText
+    private lateinit var btnGenerateFitness: Button
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
 
-            if (!lat.isNaN() && !lng.isNaN()) {
-                val intent = Intent(requireContext(), MapsActivity::class.java).apply {
-                    putExtra("extra_dest_lat", lat)
-                    putExtra("extra_dest_lng", lng)
-                }
-                startActivity(intent)
-            } else {
-                Toast.makeText(requireContext(), "목적지 좌표를 불러오지 못했습니다.", Toast.LENGTH_SHORT).show()
-            }
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+
+        if (fineGranted || coarseGranted) {
+            handleGenerateClick()
+        } else {
+            Toast.makeText(requireContext(), "위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -49,59 +50,163 @@ class FindRouteFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        val view = inflater.inflate(R.layout.fragment_find_route, container, false)
+        val view = inflater.inflate(R.layout.fragment_fitness_route, container, false)
 
-        val etEnd = view.findViewById<EditText>(R.id.etEnd)
-        val btnStart = view.findViewById<Button>(R.id.btn_start_navigation)
-        val btnSelect = view.findViewById<Button>(R.id.btn_select_destination)
-        val btnTest = view.findViewById<Button>(R.id.btn_test_navigation)
+        etDistance = view.findViewById(R.id.etDistance)
+        btnGenerateFitness = view.findViewById(R.id.btnGenerateFitness)
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
 
-        // 1️⃣ 목적지 검색 후 지도 이동
-        btnStart.setOnClickListener {
-            val query = etEnd.text.toString().trim()
-            if (query.isEmpty()) {
-                Toast.makeText(requireContext(), "목적지를 입력하거나 지도에서 선택하세요.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            viewLifecycleOwner.lifecycleScope.launch {
-                val dest = withContext(Dispatchers.IO) {
-                    try {
-                        @Suppress("DEPRECATION")
-                        Geocoder(requireContext(), Locale.KOREA)
-                            .getFromLocationName(query, 1)
-                            ?.firstOrNull()
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
-
-                if (dest == null) {
-                    Toast.makeText(
-                        requireContext(),
-                        "주소를 찾을 수 없습니다. 지도에서 직접 선택해 보세요.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return@launch
-                }
-
-                val intent = Intent(requireContext(), MapsActivity::class.java).apply {
-                    putExtra("extra_dest_lat", dest.latitude)
-                    putExtra("extra_dest_lng", dest.longitude)
-                }
-                startActivity(intent)
-            }
+        btnGenerateFitness.setOnClickListener {
+            checkPermissionAndStart()
         }
-
-        // 2️⃣ 지도에서 목적지 직접 선택
-        btnSelect.setOnClickListener {
-            val intent = Intent(requireContext(), SelectLocationActivity::class.java)
-            selectDestLauncher.launch(intent)
-        }
-
-        // 3️⃣ 테스트 버튼은 숨김 처리
-        btnTest?.visibility = View.GONE
 
         return view
+    }
+
+    private fun checkPermissionAndStart() {
+        val fineGranted = ActivityCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        val coarseGranted = ActivityCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (fineGranted || coarseGranted) {
+            handleGenerateClick()
+        } else {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
+
+    private fun handleGenerateClick() {
+        val distanceText = etDistance.text.toString().trim()
+
+        if (distanceText.isEmpty()) {
+            Toast.makeText(requireContext(), "목표 거리를 입력하세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val targetKm = distanceText.toDoubleOrNull()
+        if (targetKm == null) {
+            Toast.makeText(requireContext(), "숫자로 입력하세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (targetKm < 1 || targetKm > 50) {
+            Toast.makeText(requireContext(), "목표 거리는 1~50km 사이로 입력하세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val fineGranted = ActivityCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        val coarseGranted = ActivityCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!fineGranted && !coarseGranted) {
+            Toast.makeText(requireContext(), "위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        fusedLocationClient.lastLocation
+            .addOnSuccessListener { location: Location? ->
+                if (location == null) {
+                    Toast.makeText(requireContext(), "현재 위치를 가져오지 못했습니다.", Toast.LENGTH_SHORT).show()
+                    return@addOnSuccessListener
+                }
+
+                requestFitnessRoutes(location, targetKm)
+            }
+            .addOnFailureListener {
+                Toast.makeText(requireContext(), "위치 조회 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    private fun requestFitnessRoutes(location: Location, targetKm: Double) {
+        RetrofitClient.fitnessApi.recommendLoopRoute(
+            location.latitude,
+            location.longitude,
+            targetKm
+        ).enqueue(object : Callback<FitnessRecommendResponse> {
+
+            override fun onResponse(
+                call: Call<FitnessRecommendResponse>,
+                response: Response<FitnessRecommendResponse>
+            ) {
+                if (!isAdded) return
+
+                if (!response.isSuccessful) {
+                    Toast.makeText(
+                        requireContext(),
+                        "서버 응답 오류: ${response.code()}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return
+                }
+
+                val routeList = response.body()?.routes ?: emptyList()
+
+                if (routeList.isEmpty()) {
+                    Toast.makeText(requireContext(), "추천 경로가 없습니다.", Toast.LENGTH_SHORT).show()
+                    return
+                }
+
+                val options = ArrayList<FitnessRouteOption>()
+
+                for (route in routeList) {
+                    val routePoints = ArrayList<RoutePointData>()
+
+                    for (point in route.polyline) {
+                        if (point.size >= 2) {
+                            routePoints.add(
+                                RoutePointData(
+                                    lat = point[0],
+                                    lng = point[1]
+                                )
+                            )
+                        }
+                    }
+
+                    options.add(
+                        FitnessRouteOption(
+                            routeId = route.route_id,
+                            title = route.title,
+                            distanceKm = route.distance_km,
+                            durationMin = route.duration_min,
+                            elevationGain = route.elevation_gain,
+                            congestionText = route.congestion_text,
+                            score = route.score,
+                            routePoints = routePoints
+                        )
+                    )
+                }
+
+                val intent = Intent(requireContext(), FitnessRecommendResultActivity::class.java)
+                intent.putExtra("fitness_routes", options)
+                startActivity(intent)
+            }
+
+            override fun onFailure(call: Call<FitnessRecommendResponse>, t: Throwable) {
+                if (!isAdded) return
+
+                Toast.makeText(
+                    requireContext(),
+                    "서버 연결 실패: ${t.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        })
     }
 }

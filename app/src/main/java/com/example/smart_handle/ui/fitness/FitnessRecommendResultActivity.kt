@@ -9,9 +9,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.smart_handle.R
 import com.example.smart_handle.database.RouteRepository
-import com.example.smart_handle.maps.TurnEvent
-import com.example.smart_handle.maps.TurnType
+import com.example.smart_handle.maps.FitnessTurnExtractor
 import com.example.smart_handle.ml.FeatureExtractor
+import com.example.smart_handle.ui.driving.DrivingActivity
 import com.google.android.gms.maps.model.LatLng
 
 class FitnessRecommendResultActivity : AppCompatActivity() {
@@ -38,19 +38,13 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
 
         val routes = getRouteListFromIntent()
 
-        if (routes.size < 3) {
-            Toast.makeText(this, "추천 경로 데이터가 부족합니다.", Toast.LENGTH_SHORT).show()
+        if (routes.isEmpty()) {
+            Toast.makeText(this, "추천 경로를 불러오지 못했습니다", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
 
-        bindRoute(tvRoute1, routes[0])
-        bindRoute(tvRoute2, routes[1])
-        bindRoute(tvRoute3, routes[2])
-
-        btnRoute1.setOnClickListener { onRouteSelected(routes[0]) }
-        btnRoute2.setOnClickListener { onRouteSelected(routes[1]) }
-        btnRoute3.setOnClickListener { onRouteSelected(routes[2]) }
+        setupRouteViews(routes)
     }
 
     private fun getRouteListFromIntent(): ArrayList<FitnessRouteOption> {
@@ -62,6 +56,35 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             intent.getSerializableExtra("fitness_routes") as? ArrayList<FitnessRouteOption>
                 ?: arrayListOf()
+        }
+    }
+
+    private fun setupRouteViews(routes: ArrayList<FitnessRouteOption>) {
+        if (routes.size >= 1) {
+            bindRoute(tvRoute1, routes[0])
+            btnRoute1.isEnabled = true
+            btnRoute1.setOnClickListener { onRouteSelected(routes[0]) }
+        } else {
+            tvRoute1.text = "추천 경로 없음"
+            btnRoute1.isEnabled = false
+        }
+
+        if (routes.size >= 2) {
+            bindRoute(tvRoute2, routes[1])
+            btnRoute2.isEnabled = true
+            btnRoute2.setOnClickListener { onRouteSelected(routes[1]) }
+        } else {
+            tvRoute2.text = "추천 경로 없음"
+            btnRoute2.isEnabled = false
+        }
+
+        if (routes.size >= 3) {
+            bindRoute(tvRoute3, routes[2])
+            btnRoute3.isEnabled = true
+            btnRoute3.setOnClickListener { onRouteSelected(routes[2]) }
+        } else {
+            tvRoute3.text = "추천 경로 없음"
+            btnRoute3.isEnabled = false
         }
     }
 
@@ -87,15 +110,12 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
             latLngPoints.add(LatLng(point.lat, point.lng))
         }
 
-        val turnEvents = ArrayList<TurnEvent>()
-        for (i in 1 until latLngPoints.size - 1) {
-            turnEvents.add(
-                TurnEvent(
-                    location = latLngPoints[i],
-                    type = TurnType.STRAIGHT
-                )
-            )
+        if (latLngPoints.size < 2) {
+            Toast.makeText(this, "주행에 필요한 경로 데이터가 부족합니다.", Toast.LENGTH_SHORT).show()
+            return
         }
+
+        val turnEvents = FitnessTurnExtractor.extractTurnEvents(latLngPoints)
 
         val slope = route.elevationGain.toDouble()
 
@@ -111,19 +131,18 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
         val repo = RouteRepository(this)
         repo.insertRoute(slope, congestion, turnCount, duration, 1)
 
-        val intent = Intent(this, FitnessDrivingActivity::class.java)
+        val drivingIntent = Intent(this, DrivingActivity::class.java).apply {
+            putExtra("routeType", "fitness")
+            putExtra("routeId", route.routeId)
+            putExtra("distanceKm", route.distanceKm)
+            putExtra("durationMin", route.durationMin)
+            putExtra("elevationGain", route.elevationGain)
+            putExtra("congestionText", route.congestionText)
+            putExtra("turnCount", turnCount)
+            putParcelableArrayListExtra("turn_events", turnEvents)
+            putParcelableArrayListExtra("route_points", latLngPoints)
+        }
 
-        intent.putExtra("routeType", "fitness")
-        intent.putExtra("routeId", route.routeId)
-        intent.putExtra("distanceKm", route.distanceKm)
-        intent.putExtra("durationMin", route.durationMin)
-        intent.putExtra("elevationGain", route.elevationGain)
-        intent.putExtra("congestionText", route.congestionText)
-        intent.putExtra("turnCount", turnCount)
-
-        intent.putParcelableArrayListExtra("turn_events", turnEvents)
-        intent.putParcelableArrayListExtra("route_points", latLngPoints)
-
-        startActivity(intent)
+        startActivity(drivingIntent)
     }
 }

@@ -163,7 +163,7 @@ class DrivingActivity : AppCompatActivity(),
         }
     }
 
-    private fun saveFitnessSurveyToFirestore(satisfaction: String) {
+    private fun saveToFirestore(satisfaction: String, completionPercent: Int) {
         if (firestoreSaved) {
             safeFinish()
             return
@@ -172,16 +172,33 @@ class DrivingActivity : AppCompatActivity(),
 
         val user = FirebaseAuth.getInstance().currentUser
         if (user == null) {
-            Toast.makeText(this, "로그인 정보가 없어 만족도 저장을 건너뜁니다.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "로그인 정보가 없어 운동 기록 저장을 건너뜁니다.", Toast.LENGTH_SHORT).show()
             safeFinish()
             return
         }
 
+        val routeId = intent.getStringExtra("routeId") ?: ""
+        val distanceKmFromIntent = intent.getDoubleExtra("distanceKm", 0.0)
+        val durationMinFromIntent = intent.getIntExtra("durationMin", 0)
+        val elevationGain = intent.getIntExtra("elevationGain", 0)
+        val congestionText = intent.getStringExtra("congestionText") ?: "중간"
+        val turnCount = intent.getIntExtra("turnCount", 0)
+
+        val actualDurationSec = getDurationSeconds()
+        val actualDistanceKm = getDistanceKm()
+
         val data = hashMapOf(
             "routeType" to "fitness",
-            "distanceKm" to getDistanceKm(),
-            "durationSec" to getDurationSeconds(),
+            "routeId" to routeId,
+            "distanceKm" to distanceKmFromIntent,
+            "durationMin" to durationMinFromIntent,
+            "elevationGain" to elevationGain,
+            "congestionText" to congestionText,
+            "turnCount" to turnCount,
+            "completionPercent" to completionPercent,
             "satisfaction" to satisfaction,
+            "actualDurationSec" to actualDurationSec,
+            "actualDistanceKm" to actualDistanceKm,
             "createdAt" to FieldValue.serverTimestamp()
         )
 
@@ -194,27 +211,36 @@ class DrivingActivity : AppCompatActivity(),
                 safeFinish()
             }
             .addOnFailureListener { e ->
-                android.util.Log.e("FIRESTORE_SAVE", "저장 실패", e)
+                Log.e("FIRESTORE_SAVE", "저장 실패", e)
                 Toast.makeText(this, "저장 실패: ${e.message}", Toast.LENGTH_LONG).show()
                 safeFinish()
             }
     }
-
     private fun showSatisfactionDialog() {
         if (surveyShown || isFinishing || isDestroyed) return
         surveyShown = true
 
+        val options = arrayOf("만족", "보통", "불만족")
+
         AlertDialog.Builder(this)
             .setTitle("운동 만족도")
-            .setMessage("이번 운동 경로는 어떠셨나요?")
-            .setPositiveButton("만족") { _, _ ->
-                saveFitnessSurveyToFirestore("만족")
+            .setItems(options) { _, which ->
+                val selectedSatisfaction = options[which]
+                showCompletionPercentDialog(selectedSatisfaction)
             }
-            .setNeutralButton("보통") { _, _ ->
-                saveFitnessSurveyToFirestore("보통")
-            }
-            .setNegativeButton("불만족") { _, _ ->
-                saveFitnessSurveyToFirestore("불만족")
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun showCompletionPercentDialog(satisfaction: String) {
+        val percentOptions = arrayOf("25%", "50%", "75%", "100%")
+        val percentValues = arrayOf(25, 50, 75, 100)
+
+        AlertDialog.Builder(this)
+            .setTitle("얼마나 탔나요?")
+            .setItems(percentOptions) { _, which ->
+                val completionPercent = percentValues[which]
+                saveToFirestore(satisfaction, completionPercent)
             }
             .setCancelable(false)
             .show()

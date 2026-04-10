@@ -60,6 +60,12 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.SmartHandle" />
 
+        <activity
+            android:name=".ui.fitness.FitnessDrivingActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.SmartHandle" />
+
         <!-- ✅ 목적지 선택 화면 -->
         <activity android:name=".mapselect.SelectLocationActivity" />
 

@@ -72,6 +72,7 @@ class FitnessDrivingActivity : AppCompatActivity() {
             .show()
     }
 
+
     private fun saveToFirestore(satisfaction: String, completionPercent: Int) {
         val user = FirebaseAuth.getInstance().currentUser ?: return
 

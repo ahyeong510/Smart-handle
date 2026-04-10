@@ -9,9 +9,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.smart_handle.R
 import com.example.smart_handle.database.RouteRepository
-import com.example.smart_handle.maps.TurnEvent
-import com.example.smart_handle.maps.TurnType
 import com.example.smart_handle.ml.FeatureExtractor
+import com.example.smart_handle.ui.driving.DrivingActivity
 import com.google.android.gms.maps.model.LatLng
 
 class FitnessRecommendResultActivity : AppCompatActivity() {
@@ -87,16 +86,6 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
             latLngPoints.add(LatLng(point.lat, point.lng))
         }
 
-        val turnEvents = ArrayList<TurnEvent>()
-        for (i in 1 until latLngPoints.size - 1) {
-            turnEvents.add(
-                TurnEvent(
-                    location = latLngPoints[i],
-                    type = TurnType.STRAIGHT
-                )
-            )
-        }
-
         val slope = route.elevationGain.toDouble()
 
         val congestion = when (route.congestionText) {
@@ -108,22 +97,25 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
         val duration = route.durationMin.toDouble()
         val turnCount = FeatureExtractor.calculateTurnCount(latLngPoints)
 
+        // 선택 로그 저장
         val repo = RouteRepository(this)
         repo.insertRoute(slope, congestion, turnCount, duration, 1)
 
-        val intent = Intent(this, FitnessDrivingActivity::class.java)
+        val intent = Intent(this, DrivingActivity::class.java).apply {
+            putExtra("routeType", "fitness")
+            putExtra("routeId", route.routeId)
+            putExtra("routeTitle", route.title)
+            putExtra("distanceKm", route.distanceKm)
+            putExtra("durationMin", route.durationMin)
+            putExtra("elevationGain", route.elevationGain)
+            putExtra("congestionText", route.congestionText)
+            putExtra("turnCount", turnCount)
 
-        intent.putExtra("routeType", "fitness")
-        intent.putExtra("routeId", route.routeId)
-        intent.putExtra("distanceKm", route.distanceKm)
-        intent.putExtra("durationMin", route.durationMin)
-        intent.putExtra("elevationGain", route.elevationGain)
-        intent.putExtra("congestionText", route.congestionText)
-        intent.putExtra("turnCount", turnCount)
-
-        intent.putParcelableArrayListExtra("turn_events", turnEvents)
-        intent.putParcelableArrayListExtra("route_points", latLngPoints)
+            // 운동모드 실제 주행용 경로
+            putParcelableArrayListExtra("route_points", latLngPoints)
+        }
 
         startActivity(intent)
+        finish()
     }
 }

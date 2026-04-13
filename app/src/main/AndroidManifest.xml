@@ -76,7 +76,7 @@
         <activity android:name=".auth.SignupActivity" />
         <activity android:name=".auth.LoginActivity" />
 
-        <activity android:name=".history.HistoryActivity" />
+        <activity android:name=".ui.fitness.HistoryActivity" />
 
     </application>
 

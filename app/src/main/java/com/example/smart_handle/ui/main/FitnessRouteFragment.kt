@@ -196,12 +196,12 @@ class FitnessRouteFragment : Fragment() {
 
                         options.add(
                             FitnessRouteOption(
-                                routeId = route.route_id,
+                                routeId = route.routeId,
                                 title = route.title,
-                                distanceKm = route.distance_km,
-                                durationMin = route.duration_min,
-                                elevationGain = route.elevation_gain,
-                                congestionText = route.congestion_text,
+                                distanceKm = route.distanceKm,
+                                durationMin = route.durationMin,
+                                elevationGain = route.elevationGain,
+                                turnCount = route.turnCount,
                                 score = route.score,
                                 routePoints = routePoints
                             )

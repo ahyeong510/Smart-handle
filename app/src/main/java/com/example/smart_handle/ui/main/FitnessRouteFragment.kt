@@ -187,26 +187,37 @@ class FitnessRouteFragment : Fragment() {
         firestore.collection("users")
             .document(uid)
             .collection("ride_history")
-            .orderBy("createdAt")
-            .limitToLast(10)
             .get()
             .addOnSuccessListener { snapshot ->
-                val history = snapshot.documents
-                    .sortedByDescending { it.getLong("createdAt") ?: 0L }
-                    .mapNotNull { doc ->
-                        val elevationGain = (doc.getLong("elevationGain") ?: 0L).toInt()
-                        val turnCount = (doc.getLong("turnCount") ?: 0L).toInt()
-                        val durationMin = (doc.getLong("durationMin") ?: 0L).toInt()
-                        val completionPercent = (doc.getLong("completionPercent") ?: 0L).toInt()
-                        val satisfaction = doc.getString("satisfaction") ?: return@mapNotNull null
 
-                        RideHistoryItem(
-                            elevationGain = elevationGain,
-                            turnCount = turnCount,
-                            durationMin = durationMin,
-                            completionPercent = completionPercent,
-                            satisfaction = satisfaction
-                        )
+                val history = snapshot.documents
+                    .sortedByDescending { doc ->
+                        when (val value = doc.get("createdAt")) {
+                            is Long -> value
+                            is Double -> value.toLong()
+                            is com.google.firebase.Timestamp -> value.seconds * 1000
+                            else -> 0L
+                        }
+                    }
+                    .take(10)
+                    .mapNotNull { doc ->
+                        try {
+                            val elevationGain = (doc.getLong("elevationGain") ?: 0L).toInt()
+                            val turnCount = (doc.getLong("turnCount") ?: 0L).toInt()
+                            val durationMin = (doc.getLong("durationMin") ?: 0L).toInt()
+                            val completionPercent = (doc.getLong("completionPercent") ?: 0L).toInt()
+                            val satisfaction = doc.getString("satisfaction") ?: "보통"
+
+                            RideHistoryItem(
+                                elevationGain,
+                                turnCount,
+                                durationMin,
+                                completionPercent,
+                                satisfaction
+                            )
+                        } catch (e: Exception) {
+                            null
+                        }
                     }
 
                 onLoaded(history)

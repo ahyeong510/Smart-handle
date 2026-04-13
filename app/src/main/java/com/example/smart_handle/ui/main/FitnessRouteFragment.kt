@@ -1,8 +1,7 @@
 package com.example.smart_handle.ui.main
 
-import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -11,19 +10,18 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.ActivityCompat
 import androidx.fragment.app.Fragment
 import com.example.smart_handle.R
 import com.example.smart_handle.network.FitnessRecommendRequest
 import com.example.smart_handle.network.FitnessRecommendResponse
 import com.example.smart_handle.network.RetrofitClient
+import com.example.smart_handle.network.RideHistoryItem
 import com.example.smart_handle.ui.fitness.FitnessRecommendResultActivity
 import com.example.smart_handle.ui.fitness.FitnessRouteOption
 import com.example.smart_handle.ui.fitness.RoutePointData
-import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -32,20 +30,8 @@ class FitnessRouteFragment : Fragment() {
 
     private lateinit var etDistance: EditText
     private lateinit var btnGenerateFitness: Button
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
 
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
-        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-
-        if (fineGranted || coarseGranted) {
-            handleGenerateClick()
-        } else {
-            Toast.makeText(requireContext(), "위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
-        }
-    }
+    private val firestore = FirebaseFirestore.getInstance()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -56,171 +42,177 @@ class FitnessRouteFragment : Fragment() {
 
         etDistance = view.findViewById(R.id.etDistance)
         btnGenerateFitness = view.findViewById(R.id.btnGenerateFitness)
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
 
         btnGenerateFitness.setOnClickListener {
-            checkPermissionAndStart()
+            requestFitnessRoute()
         }
 
         return view
     }
 
-    private fun checkPermissionAndStart() {
-        val fineGranted = ActivityCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        val coarseGranted = ActivityCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (fineGranted || coarseGranted) {
-            handleGenerateClick()
-        } else {
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
+    private fun requestFitnessRoute() {
+        val user = FirebaseAuth.getInstance().currentUser
+        if (user == null) {
+            Toast.makeText(requireContext(), "로그인이 필요합니다.", Toast.LENGTH_SHORT).show()
+            return
         }
-    }
 
-    private fun handleGenerateClick() {
         val distanceText = etDistance.text.toString().trim()
-
         if (distanceText.isEmpty()) {
-            Toast.makeText(requireContext(), "목표 거리를 입력하세요.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "목표 거리를 입력해주세요.", Toast.LENGTH_SHORT).show()
             return
         }
 
         val targetKm = distanceText.toDoubleOrNull()
-        if (targetKm == null) {
-            Toast.makeText(requireContext(), "숫자로 입력하세요.", Toast.LENGTH_SHORT).show()
+        if (targetKm == null || targetKm <= 0.0) {
+            Toast.makeText(requireContext(), "올바른 거리를 입력해주세요.", Toast.LENGTH_SHORT).show()
             return
         }
 
-        if (targetKm < 1 || targetKm > 50) {
-            Toast.makeText(requireContext(), "목표 거리는 1~50km 사이로 입력하세요.", Toast.LENGTH_SHORT).show()
-            return
-        }
+        getCurrentLocation { location ->
+            if (location == null) {
+                Toast.makeText(requireContext(), "현재 위치를 가져올 수 없습니다.", Toast.LENGTH_SHORT).show()
+                return@getCurrentLocation
+            }
 
-        val user = FirebaseAuth.getInstance().currentUser
-        if (user == null) {
-            Toast.makeText(requireContext(), "로그인 정보가 없습니다. 다시 로그인해주세요.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val fineGranted = ActivityCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        val coarseGranted = ActivityCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (!fineGranted && !coarseGranted) {
-            Toast.makeText(requireContext(), "위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        fusedLocationClient.lastLocation
-            .addOnSuccessListener { location: Location? ->
-                if (location == null) {
-                    Toast.makeText(requireContext(), "현재 위치를 가져오지 못했습니다.", Toast.LENGTH_SHORT).show()
-                    return@addOnSuccessListener
-                }
-
-                requestFitnessRoutes(
-                    userId = user.uid,
-                    location = location,
-                    targetKm = targetKm
+            loadRecentRideHistory(user.uid) { rideHistory ->
+                val request = FitnessRecommendRequest(
+                    user_id = user.uid,
+                    start_lat = location.latitude,
+                    start_lng = location.longitude,
+                    target_km = targetKm,
+                    ride_history = rideHistory
                 )
-            }
-            .addOnFailureListener {
-                Toast.makeText(requireContext(), "위치 조회 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
-            }
-    }
 
-    private fun requestFitnessRoutes(userId: String, location: Location, targetKm: Double) {
-        val request = FitnessRecommendRequest(
-            user_id = userId,
-            start_lat = location.latitude,
-            start_lng = location.longitude,
-            target_km = targetKm
-        )
+                RetrofitClient.fitnessApi.recommendLoopRoute(request)
+                    .enqueue(object : Callback<FitnessRecommendResponse> {
+                        override fun onResponse(
+                            call: Call<FitnessRecommendResponse>,
+                            response: Response<FitnessRecommendResponse>
+                        ) {
+                            if (!isAdded) return
 
-        RetrofitClient.fitnessApi.recommendLoopRoute(request)
-            .enqueue(object : Callback<FitnessRecommendResponse> {
+                            if (!response.isSuccessful) {
+                                Toast.makeText(
+                                    requireContext(),
+                                    "추천 요청 실패",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return
+                            }
 
-                override fun onResponse(
-                    call: Call<FitnessRecommendResponse>,
-                    response: Response<FitnessRecommendResponse>
-                ) {
-                    if (!isAdded) return
+                            val routeList = response.body()?.routes ?: emptyList()
+                            if (routeList.isEmpty()) {
+                                Toast.makeText(
+                                    requireContext(),
+                                    "추천 경로가 없습니다.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return
+                            }
 
-                    if (!response.isSuccessful) {
-                        Toast.makeText(
-                            requireContext(),
-                            "서버 응답 오류: ${response.code()}",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        return
-                    }
+                            val options = ArrayList<FitnessRouteOption>()
 
-                    val routeList = response.body()?.routes ?: emptyList()
-                    if (routeList.isEmpty()) {
-                        Toast.makeText(requireContext(), "추천 경로가 없습니다.", Toast.LENGTH_SHORT).show()
-                        return
-                    }
+                            for (route in routeList) {
+                                val routePoints = ArrayList<RoutePointData>()
 
-                    val options = ArrayList<FitnessRouteOption>()
+                                for (point in route.polyline) {
+                                    if (point.size >= 2) {
+                                        routePoints.add(
+                                            RoutePointData(
+                                                lat = point[0],
+                                                lng = point[1]
+                                            )
+                                        )
+                                    }
+                                }
 
-                    for (route in routeList) {
-                        val routePoints = ArrayList<RoutePointData>()
-
-                        for (point in route.polyline) {
-                            if (point.size >= 2) {
-                                routePoints.add(
-                                    RoutePointData(
-                                        lat = point[0],
-                                        lng = point[1]
+                                options.add(
+                                    FitnessRouteOption(
+                                        routeId = route.routeId,
+                                        title = route.title,
+                                        distanceKm = route.distanceKm,
+                                        durationMin = route.durationMin,
+                                        elevationGain = route.elevationGain,
+                                        turnCount = route.turnCount,
+                                        score = route.score,
+                                        routePoints = routePoints
                                     )
                                 )
                             }
+
+                            val intent = Intent(
+                                requireContext(),
+                                FitnessRecommendResultActivity::class.java
+                            ).apply {
+                                putExtra("fitness_routes", options)
+                            }
+
+                            startActivity(intent)
                         }
 
-                        options.add(
-                            FitnessRouteOption(
-                                routeId = route.routeId,
-                                title = route.title,
-                                distanceKm = route.distanceKm,
-                                durationMin = route.durationMin,
-                                elevationGain = route.elevationGain,
-                                turnCount = route.turnCount,
-                                score = route.score,
-                                routePoints = routePoints
-                            )
+                        override fun onFailure(
+                            call: Call<FitnessRecommendResponse>,
+                            t: Throwable
+                        ) {
+                            if (!isAdded) return
+                            Toast.makeText(
+                                requireContext(),
+                                "서버 연결 실패: ${t.message}",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    })
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun getCurrentLocation(onResult: (Location?) -> Unit) {
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
+
+        fusedLocationClient.lastLocation
+            .addOnSuccessListener { location ->
+                onResult(location)
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
+    }
+
+    private fun loadRecentRideHistory(
+        uid: String,
+        onLoaded: (List<RideHistoryItem>) -> Unit
+    ) {
+        firestore.collection("users")
+            .document(uid)
+            .collection("ride_history")
+            .orderBy("createdAt")
+            .limitToLast(10)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val history = snapshot.documents
+                    .sortedByDescending { it.getLong("createdAt") ?: 0L }
+                    .mapNotNull { doc ->
+                        val elevationGain = (doc.getLong("elevationGain") ?: 0L).toInt()
+                        val turnCount = (doc.getLong("turnCount") ?: 0L).toInt()
+                        val durationMin = (doc.getLong("durationMin") ?: 0L).toInt()
+                        val completionPercent = (doc.getLong("completionPercent") ?: 0L).toInt()
+                        val satisfaction = doc.getString("satisfaction") ?: return@mapNotNull null
+
+                        RideHistoryItem(
+                            elevationGain = elevationGain,
+                            turnCount = turnCount,
+                            durationMin = durationMin,
+                            completionPercent = completionPercent,
+                            satisfaction = satisfaction
                         )
                     }
 
-                    val intent = Intent(requireContext(), FitnessRecommendResultActivity::class.java)
-                    intent.putExtra("fitness_routes", options)
-                    startActivity(intent)
-                }
-
-                override fun onFailure(call: Call<FitnessRecommendResponse>, t: Throwable) {
-                    if (!isAdded) return
-                    Toast.makeText(
-                        requireContext(),
-                        "서버 연결 실패: ${t.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            })
+                onLoaded(history)
+            }
+            .addOnFailureListener {
+                onLoaded(emptyList())
+            }
     }
 }

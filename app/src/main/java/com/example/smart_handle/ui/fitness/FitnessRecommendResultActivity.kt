@@ -10,7 +10,6 @@ import androidx.appcompat.app.AppCompatActivity
 import com.example.smart_handle.R
 import com.example.smart_handle.database.RouteRepository
 import com.example.smart_handle.maps.FitnessTurnExtractor
-import com.example.smart_handle.ml.FeatureExtractor
 import com.example.smart_handle.ui.driving.DrivingActivity
 import com.google.android.gms.maps.model.LatLng
 
@@ -94,7 +93,7 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
             거리: ${route.distanceKm} km
             예상 시간: ${route.durationMin}분
             상승고도: ${route.elevationGain}m
-            혼잡도: ${route.congestionText}
+            회전 수: ${route.turnCount}
             적합도 점수: ${route.score}
         """.trimIndent()
     }
@@ -118,18 +117,17 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
         val turnEvents = FitnessTurnExtractor.extractTurnEvents(latLngPoints)
 
         val slope = route.elevationGain.toDouble()
-
-        val congestion = when (route.congestionText) {
-            "낮음" -> 0.2
-            "중간" -> 0.5
-            else -> 0.8
-        }
-
         val duration = route.durationMin.toDouble()
-        val turnCount = FeatureExtractor.calculateTurnCount(latLngPoints)
+        val turnCount = route.turnCount
 
         val repo = RouteRepository(this)
-        repo.insertRoute(slope, congestion, turnCount, duration, 1)
+        repo.insertRoute(
+            slope = slope,
+            congestion = 0.0,
+            turnCount = turnCount,
+            duration = duration,
+            selected = 1
+        )
 
         val drivingIntent = Intent(this, DrivingActivity::class.java).apply {
             putExtra("routeType", "fitness")
@@ -137,8 +135,7 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
             putExtra("distanceKm", route.distanceKm)
             putExtra("durationMin", route.durationMin)
             putExtra("elevationGain", route.elevationGain)
-            putExtra("congestionText", route.congestionText)
-            putExtra("turnCount", turnCount)
+            putExtra("turnCount", route.turnCount)
             putParcelableArrayListExtra("turn_events", turnEvents)
             putParcelableArrayListExtra("route_points", latLngPoints)
         }

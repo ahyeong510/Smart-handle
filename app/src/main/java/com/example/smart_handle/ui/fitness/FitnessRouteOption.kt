@@ -8,7 +8,7 @@ data class FitnessRouteOption(
     val distanceKm: Double,
     val durationMin: Int,
     val elevationGain: Int,
-    val congestionText: String,
+    val turnCount: Int,
     val score: Double,
     val routePoints: ArrayList<RoutePointData> = arrayListOf()
 ) : Serializable

@@ -1,12 +1,29 @@
 package com.example.smart_handle.network
 
+import com.google.gson.annotations.SerializedName
+
 data class FitnessRouteDto(
-    val route_id: String,
+    @SerializedName("route_id")
+    val routeId: String,
+
+    @SerializedName("title")
     val title: String,
-    val distance_km: Double,
-    val duration_min: Int,
-    val elevation_gain: Int,
-    val congestion_text: String,
+
+    @SerializedName("distance_km")
+    val distanceKm: Double,
+
+    @SerializedName("duration_min")
+    val durationMin: Int,
+
+    @SerializedName("elevation_gain")
+    val elevationGain: Int,
+
+    @SerializedName("turn_count")
+    val turnCount: Int,
+
+    @SerializedName("score")
     val score: Double,
+
+    @SerializedName("polyline")
     val polyline: List<List<Double>> = emptyList()
 )

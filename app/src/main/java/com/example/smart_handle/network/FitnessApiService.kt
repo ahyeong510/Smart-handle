@@ -10,4 +10,9 @@ interface FitnessApiService {
     fun recommendLoopRoute(
         @Body request: FitnessRecommendRequest
     ): Call<FitnessRecommendResponse>
+
+    @POST("tour/recommend")
+    fun recommendTourRoutes(
+        @Body request: TourRecommendRequest
+    ): Call<TourRecommendResponse>
 }

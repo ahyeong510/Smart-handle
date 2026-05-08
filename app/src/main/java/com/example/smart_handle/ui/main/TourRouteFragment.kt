@@ -1,78 +1,146 @@
-package com.example.bikenavi.ui
+package com.example.smart_handle.ui.main
 
+import android.annotation.SuppressLint
+import android.content.Intent
+import android.location.Location
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.Button
+import android.widget.EditText
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.example.smart_handle.R
+import com.example.smart_handle.network.RetrofitClient
+import com.example.smart_handle.network.TourRecommendRequest
+import com.example.smart_handle.network.TourRecommendResponse
+import com.example.smart_handle.ui.fitness.FitnessRecommendResultActivity
+import com.example.smart_handle.ui.fitness.FitnessRouteOption
+import com.example.smart_handle.ui.fitness.RoutePointData
+import com.google.android.gms.location.LocationServices
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
-class TourFragment : Fragment() {
+class TourRouteFragment : Fragment() {
 
-    private lateinit var editText: EditText
-    private lateinit var addButton: Button
-    private lateinit var listContainer: LinearLayout
-    private lateinit var generateButton: Button
-    private val spots = mutableListOf<String>()
+    private lateinit var etRadius: EditText
+    private lateinit var btnGenerate: Button
 
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
+        inflater: LayoutInflater,
+        container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
+    ): View {
         val view = inflater.inflate(R.layout.fragment_tour_route, container, false)
 
-        editText = view.findViewById(R.id.editTextSpot)
-        addButton = view.findViewById(R.id.btnAdd)
-        listContainer = view.findViewById(R.id.listContainer)
-        generateButton = view.findViewById(R.id.btnGenerate)
+        etRadius = view.findViewById(R.id.etRadius)
+        btnGenerate = view.findViewById(R.id.btnGenerateTour)
 
-        addButton.setOnClickListener {
-            val name = editText.text.toString().trim()
-            if (name.isNotEmpty()) {
-                addSpot(name)
-                editText.text.clear()
-            } else {
-                Toast.makeText(context, "관광지 이름을 입력해주세요", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        generateButton.setOnClickListener {
-            if (spots.size < 2) {
-                Toast.makeText(context, "최소 2개 이상의 관광지를 추가해주세요", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "경로를 생성합니다!", Toast.LENGTH_SHORT).show()
-                // 경로 생성 로직
-            }
+        btnGenerate.setOnClickListener {
+            requestTourRoutes()
         }
 
         return view
     }
 
-    private fun addSpot(name: String) {
-        spots.add(name)
+    private fun requestTourRoutes() {
+        val radiusKm = etRadius.text.toString().trim().toDoubleOrNull() ?: 5.0
 
-        val spotView = layoutInflater.inflate(R.layout.item_spot, listContainer, false)
-        val spotNumber = spotView.findViewById<TextView>(R.id.spotNumber)
-        val spotName = spotView.findViewById<TextView>(R.id.spotName)
-        val deleteButton = spotView.findViewById<Button>(R.id.btnDelete)
-
-        spotNumber.text = spots.size.toString()
-        spotName.text = name
-
-        deleteButton.setOnClickListener {
-            listContainer.removeView(spotView)
-            spots.remove(name)
-            refreshNumbers()
+        if (radiusKm < 3.0 || radiusKm > 10.0) {
+            Toast.makeText(requireContext(), "반경은 3~10km 사이로 입력해주세요.", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        listContainer.addView(spotView)
+        getCurrentLocation { location ->
+            if (location == null) {
+                Toast.makeText(requireContext(), "현재 위치를 가져올 수 없습니다.", Toast.LENGTH_SHORT).show()
+                return@getCurrentLocation
+            }
+
+            val request = TourRecommendRequest(
+                start_lat = location.latitude,
+                start_lng = location.longitude,
+                radius_m = (radiusKm * 1000).toInt()
+            )
+
+            RetrofitClient.fitnessApi.recommendTourRoutes(request)
+                .enqueue(object : Callback<TourRecommendResponse> {
+                    override fun onResponse(
+                        call: Call<TourRecommendResponse>,
+                        response: Response<TourRecommendResponse>
+                    ) {
+                        if (!isAdded) return
+
+                        if (!response.isSuccessful) {
+                            Toast.makeText(requireContext(), "관광지 추천 요청 실패", Toast.LENGTH_SHORT).show()
+                            return
+                        }
+
+                        val routes = response.body()?.routes ?: emptyList()
+
+                        if (routes.isEmpty()) {
+                            Toast.makeText(requireContext(), "추천 관광지 경로가 없습니다.", Toast.LENGTH_SHORT).show()
+                            return
+                        }
+
+                        val options = ArrayList<FitnessRouteOption>()
+
+                        for (route in routes) {
+                            val routePoints = ArrayList<RoutePointData>()
+
+                            for (point in route.polyline) {
+                                if (point.size >= 2) {
+                                    routePoints.add(
+                                        RoutePointData(
+                                            lat = point[0],
+                                            lng = point[1]
+                                        )
+                                    )
+                                }
+                            }
+
+                            options.add(
+                                FitnessRouteOption(
+                                    routeId = route.routeId,
+                                    title = route.title,
+                                    distanceKm = route.distanceKm,
+                                    durationMin = route.durationMin,
+                                    elevationGain = 0,
+                                    turnCount = route.turnCount,
+                                    score = route.score,
+                                    routePoints = routePoints
+                                )
+                            )
+                        }
+
+                        val intent = Intent(requireContext(), FitnessRecommendResultActivity::class.java).apply {
+                            putExtra("route_mode", "tour")
+                            putExtra("fitness_routes", options)
+                        }
+
+                        startActivity(intent)
+                    }
+
+                    override fun onFailure(call: Call<TourRecommendResponse>, t: Throwable) {
+                        if (!isAdded) return
+                        Toast.makeText(requireContext(), "서버 연결 실패: ${t.message}", Toast.LENGTH_SHORT).show()
+                    }
+                })
+        }
     }
 
-    private fun refreshNumbers() {
-        for (i in 0 until listContainer.childCount) {
-            val spotNumber = listContainer.getChildAt(i).findViewById<TextView>(R.id.spotNumber)
-            spotNumber.text = (i + 1).toString()
-        }
+    @SuppressLint("MissingPermission")
+    private fun getCurrentLocation(onResult: (Location?) -> Unit) {
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
+
+        fusedLocationClient.lastLocation
+            .addOnSuccessListener { location ->
+                onResult(location)
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
     }
 }

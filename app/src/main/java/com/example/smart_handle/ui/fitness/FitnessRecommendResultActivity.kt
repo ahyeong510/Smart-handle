@@ -116,21 +116,10 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
 
         val turnEvents = FitnessTurnExtractor.extractTurnEvents(latLngPoints)
 
-        val slope = route.elevationGain.toDouble()
-        val duration = route.durationMin.toDouble()
-        val turnCount = route.turnCount
-
-        val repo = RouteRepository(this)
-        repo.insertRoute(
-            slope = slope,
-            congestion = 0.0,
-            turnCount = turnCount,
-            duration = duration,
-            selected = 1
-        )
+        val routeMode = intent.getStringExtra("route_mode") ?: "fitness"
 
         val drivingIntent = Intent(this, DrivingActivity::class.java).apply {
-            putExtra("routeType", "fitness")
+            putExtra("routeType", routeMode)
             putExtra("routeId", route.routeId)
             putExtra("distanceKm", route.distanceKm)
             putExtra("durationMin", route.durationMin)

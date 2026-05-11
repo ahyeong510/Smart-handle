@@ -15,6 +15,7 @@ import com.example.smart_handle.R
 import com.example.smart_handle.network.RetrofitClient
 import com.example.smart_handle.network.TourRecommendRequest
 import com.example.smart_handle.network.TourRecommendResponse
+import com.example.smart_handle.ui.Tour.TourPlaceData
 import com.example.smart_handle.ui.fitness.FitnessRecommendResultActivity
 import com.example.smart_handle.ui.fitness.FitnessRouteOption
 import com.example.smart_handle.ui.fitness.RoutePointData
@@ -101,6 +102,19 @@ class TourRouteFragment : Fragment() {
                                 }
                             }
 
+                            val tourPlaces = ArrayList<TourPlaceData>()
+
+                            for (place in route.tourPlaces) {
+                                tourPlaces.add(
+                                    TourPlaceData(
+                                        name = place.name,
+                                        lat = place.lat,
+                                        lng = place.lng,
+                                        address = place.address
+                                    )
+                                )
+                            }
+
                             options.add(
                                 FitnessRouteOption(
                                     routeId = route.routeId,
@@ -110,7 +124,8 @@ class TourRouteFragment : Fragment() {
                                     elevationGain = 0,
                                     turnCount = route.turnCount,
                                     score = route.score,
-                                    routePoints = routePoints
+                                    routePoints = routePoints,
+                                    tourPlaces = tourPlaces
                                 )
                             )
                         }

@@ -5,9 +5,12 @@ import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.location.Location
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.speech.tts.TextToSpeech
+import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.ImageView
@@ -23,6 +26,7 @@ import com.example.smart_handle.data.RideDao
 import com.example.smart_handle.data.RideEntity
 import com.example.smart_handle.maps.TurnEvent
 import com.example.smart_handle.maps.TurnType
+import com.example.smart_handle.ui.Tour.TourPlaceData
 import com.example.smart_handle.ui.ble.BluetoothManager
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -41,8 +45,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.math.roundToInt
-import android.util.Log
 
 class DrivingActivity : AppCompatActivity(),
     BluetoothManager.Listener,
@@ -87,6 +91,16 @@ class DrivingActivity : AppCompatActivity(),
 
     private var routeType: String = "navigation"
 
+    // ⭐ 관광모드 TTS 관련
+    private val tourPlaces = arrayListOf<TourPlaceData>()
+    private val spokenTourPlaceNames = mutableSetOf<String>()
+    private var tts: TextToSpeech? = null
+    private var isTtsReady = false
+
+    companion object {
+        private const val TOUR_PLACE_TRIGGER_DISTANCE_M = 30f
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driving_navigation)
@@ -123,11 +137,62 @@ class DrivingActivity : AppCompatActivity(),
             routePoints.addAll(it)
         }
 
+        loadTourPlacesFromIntent()
+
+        if (isTourRoute()) {
+            initTextToSpeech()
+        }
+
         checkLocationPermission()
     }
 
     private fun isFitnessRoute(): Boolean {
         return routeType == "fitness"
+    }
+
+    private fun isTourRoute(): Boolean {
+        return routeType == "tour"
+    }
+
+    @Suppress("DEPRECATION")
+    private fun loadTourPlacesFromIntent() {
+        if (!isTourRoute()) return
+
+        val receivedPlaces: ArrayList<TourPlaceData>? =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getSerializableExtra(
+                    "tour_places",
+                    ArrayList::class.java
+                ) as? ArrayList<TourPlaceData>
+            } else {
+                intent.getSerializableExtra("tour_places") as? ArrayList<TourPlaceData>
+            }
+
+        receivedPlaces?.let {
+            tourPlaces.addAll(it)
+        }
+
+        Log.d("TOUR_TTS", "받은 관광지 수: ${tourPlaces.size}")
+    }
+
+    private fun initTextToSpeech() {
+        tts = TextToSpeech(this) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val result = tts?.setLanguage(Locale.KOREAN)
+
+                isTtsReady =
+                    result != TextToSpeech.LANG_MISSING_DATA &&
+                            result != TextToSpeech.LANG_NOT_SUPPORTED
+
+                if (isTtsReady) {
+                    Log.d("TOUR_TTS", "TTS 초기화 성공")
+                } else {
+                    Log.e("TOUR_TTS", "한국어 TTS를 지원하지 않음")
+                }
+            } else {
+                Log.e("TOUR_TTS", "TTS 초기화 실패")
+            }
+        }
     }
 
     private fun getDurationSeconds(): Long {
@@ -156,9 +221,9 @@ class DrivingActivity : AppCompatActivity(),
                 )
 
                 rideDao.insertRide(ride)
-                android.util.Log.d("DB_SAVE", "Room 저장 완료: $distanceKm km")
+                Log.d("DB_SAVE", "Room 저장 완료: $distanceKm km")
             } catch (e: Exception) {
-                android.util.Log.e("DB_SAVE", "Room 저장 실패", e)
+                Log.e("DB_SAVE", "Room 저장 실패", e)
             }
         }
     }
@@ -216,6 +281,7 @@ class DrivingActivity : AppCompatActivity(),
                 safeFinish()
             }
     }
+
     private fun showSatisfactionDialog() {
         if (surveyShown || isFinishing || isDestroyed) return
         surveyShown = true
@@ -288,7 +354,7 @@ class DrivingActivity : AppCompatActivity(),
         try {
             finish()
         } catch (e: Exception) {
-            android.util.Log.e("DRIVING_FINISH", "finish 오류", e)
+            Log.e("DRIVING_FINISH", "finish 오류", e)
         }
     }
 
@@ -296,7 +362,7 @@ class DrivingActivity : AppCompatActivity(),
         try {
             fused.removeLocationUpdates(locationCallback)
         } catch (e: Exception) {
-            android.util.Log.e("LOCATION", "removeLocationUpdates 오류", e)
+            Log.e("LOCATION", "removeLocationUpdates 오류", e)
         }
     }
 
@@ -340,10 +406,56 @@ class DrivingActivity : AppCompatActivity(),
             checkTurnEvent(here)
             checkArrival(here)
 
+            if (isTourRoute()) {
+                checkTourPlaceArrival(here)
+            }
+
             googleMap?.animateCamera(
                 CameraUpdateFactory.newLatLngZoom(here, 17f)
             )
         }
+    }
+
+    private fun checkTourPlaceArrival(current: LatLng) {
+        if (!isTtsReady || tourPlaces.isEmpty()) return
+
+        for (place in tourPlaces) {
+            if (spokenTourPlaceNames.contains(place.name)) continue
+
+            val placeLatLng = LatLng(place.lat, place.lng)
+            val dist = distance(current, placeLatLng)
+
+            if (dist <= TOUR_PLACE_TRIGGER_DISTANCE_M) {
+                spokenTourPlaceNames.add(place.name)
+
+                val message = buildTourPlaceMessage(place)
+                speakTourMessage(message)
+
+                turnCard.visibility = View.VISIBLE
+                turnDistance.text = ""
+                turnTypeText.text = "${place.name} 근처에 도착했습니다"
+
+                Log.d("TOUR_TTS", "관광지 도착 안내: ${place.name}, 거리=${dist.roundToInt()}m")
+                break
+            }
+        }
+    }
+
+    private fun buildTourPlaceMessage(place: TourPlaceData): String {
+        return if (place.address.isNotBlank()) {
+            "${place.name} 근처에 도착했습니다. 이곳은 현재 관광 코스에 포함된 장소입니다. 주소는 ${place.address}입니다."
+        } else {
+            "${place.name} 근처에 도착했습니다. 이곳은 현재 관광 코스에 포함된 장소입니다."
+        }
+    }
+
+    private fun speakTourMessage(message: String) {
+        tts?.speak(
+            message,
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            "tour_place_guide"
+        )
     }
 
     private fun checkTurnEvent(current: LatLng) {
@@ -439,7 +551,7 @@ class DrivingActivity : AppCompatActivity(),
             TurnType.LEFT -> {
                 if (isContinuous) {
                     Log.d("VIBRATION", "LC")
-                    BluetoothManager.sendText("LC")   // 🔥 연속 좌회전
+                    BluetoothManager.sendText("LC")
                 } else {
                     Log.d("VIBRATION", "L")
                     BluetoothManager.sendText("L")
@@ -449,7 +561,7 @@ class DrivingActivity : AppCompatActivity(),
             TurnType.RIGHT -> {
                 if (isContinuous) {
                     Log.d("VIBRATION", "RC")
-                    BluetoothManager.sendText("RC")   // 🔥 연속 우회전
+                    BluetoothManager.sendText("RC")
                 } else {
                     Log.d("VIBRATION", "R")
                     BluetoothManager.sendText("R")
@@ -494,6 +606,10 @@ class DrivingActivity : AppCompatActivity(),
         stopRepeating()
         stopLocationTracking()
 
+        tts?.stop()
+        tts?.shutdown()
+        tts = null
+
         if (!roomSaved) {
             saveRideToRoom(false)
         }
@@ -527,6 +643,6 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     override fun onLog(msg: String) {
-        android.util.Log.d("DrivingActivity_BLE", msg)
+        Log.d("DrivingActivity_BLE", msg)
     }
 }

@@ -127,6 +127,7 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
             putExtra("turnCount", route.turnCount)
             putParcelableArrayListExtra("turn_events", turnEvents)
             putParcelableArrayListExtra("route_points", latLngPoints)
+            putExtra("tour_places", route.tourPlaces)
         }
 
         startActivity(drivingIntent)

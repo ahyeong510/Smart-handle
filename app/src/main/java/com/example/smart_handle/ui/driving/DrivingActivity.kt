@@ -122,8 +122,36 @@ class DrivingActivity : AppCompatActivity(),
         turnDistance = findViewById(R.id.turnDistance)
         turnTypeText = findViewById(R.id.turnTypeText)
 
+
+
         findViewById<Button>(R.id.btn_stop_route).setOnClickListener {
             handleRideFinishedByUser()
+        }
+
+        findViewById<Button>(R.id.btn_test_tts).setOnClickListener {
+
+            if (tourPlaces.isNotEmpty()) {
+
+                val place = tourPlaces[0]
+
+                val message = buildTourPlaceMessage(place)
+
+                speakTourMessage(message)
+
+                Toast.makeText(
+                    this,
+                    "${place.name} TTS 테스트",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+            } else {
+
+                Toast.makeText(
+                    this,
+                    "관광지 정보 없음",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
 
         BluetoothManager.attachListener(this)

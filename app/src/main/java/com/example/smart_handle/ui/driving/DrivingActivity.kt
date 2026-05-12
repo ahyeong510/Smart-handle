@@ -128,30 +128,32 @@ class DrivingActivity : AppCompatActivity(),
             handleRideFinishedByUser()
         }
 
-        findViewById<Button>(R.id.btn_test_tts).setOnClickListener {
+        val btnTestTts = findViewById<Button>(R.id.btn_test_tts)
 
-            if (tourPlaces.isNotEmpty()) {
+        if (isTourRoute()) {
+            btnTestTts.visibility = View.VISIBLE
 
-                val place = tourPlaces[0]
+            btnTestTts.setOnClickListener {
+                if (tourPlaces.isNotEmpty()) {
+                    val place = tourPlaces[0]
+                    val message = buildTourPlaceMessage(place)
+                    speakTourMessage(message)
 
-                val message = buildTourPlaceMessage(place)
-
-                speakTourMessage(message)
-
-                Toast.makeText(
-                    this,
-                    "${place.name} TTS 테스트",
-                    Toast.LENGTH_SHORT
-                ).show()
-
-            } else {
-
-                Toast.makeText(
-                    this,
-                    "관광지 정보 없음",
-                    Toast.LENGTH_SHORT
-                ).show()
+                    Toast.makeText(
+                        this,
+                        "${place.name} TTS 테스트",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        this,
+                        "관광지 정보 없음",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
+        } else {
+            btnTestTts.visibility = View.GONE
         }
 
         BluetoothManager.attachListener(this)

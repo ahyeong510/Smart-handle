@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.location.Location
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -68,6 +69,7 @@ class TourRouteFragment : Fragment() {
 
             RetrofitClient.fitnessApi.recommendTourRoutes(request)
                 .enqueue(object : Callback<TourRecommendResponse> {
+
                     override fun onResponse(
                         call: Call<TourRecommendResponse>,
                         response: Response<TourRecommendResponse>
@@ -75,6 +77,10 @@ class TourRouteFragment : Fragment() {
                         if (!isAdded) return
 
                         if (!response.isSuccessful) {
+                            Log.e(
+                                "TourRouteAPI",
+                                "관광지 추천 요청 실패 code=${response.code()}, error=${response.errorBody()?.string()}"
+                            )
                             Toast.makeText(requireContext(), "관광지 추천 요청 실패", Toast.LENGTH_SHORT).show()
                             return
                         }
@@ -107,11 +113,11 @@ class TourRouteFragment : Fragment() {
                             for (place in route.tourPlaces) {
                                 tourPlaces.add(
                                     TourPlaceData(
-                                        name = place.name,
+                                        name = place.name ?: "이름 없음",
                                         lat = place.lat,
                                         lng = place.lng,
-                                        address = place.address,
-                                        description = place.description
+                                        address = place.address ?: "주소 없음",
+                                        description = place.description ?: "설명 없음"
                                     )
                                 )
                             }
@@ -140,8 +146,15 @@ class TourRouteFragment : Fragment() {
                     }
 
                     override fun onFailure(call: Call<TourRecommendResponse>, t: Throwable) {
+                        Log.e("TourRouteAPI", "관광지 경로 요청 실패", t)
+
                         if (!isAdded) return
-                        Toast.makeText(requireContext(), "서버 연결 실패: ${t.message}", Toast.LENGTH_SHORT).show()
+
+                        Toast.makeText(
+                            requireContext(),
+                            "서버 연결 실패: ${t.message}",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
                 })
         }

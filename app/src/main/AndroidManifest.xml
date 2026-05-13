@@ -79,5 +79,6 @@
         <activity android:name=".ui.fitness.HistoryActivity" />
 
     </application>
+    
 
 </manifest>

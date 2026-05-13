@@ -473,17 +473,18 @@ class DrivingActivity : AppCompatActivity(),
 
     private fun buildTourPlaceMessage(place: TourPlaceData): String {
 
-        return if (place.description.isNotBlank()) {
+        return if (!place.description.isNullOrBlank()) {
 
             "${place.name} 근처에 도착했습니다. ${place.description}"
 
         } else if (place.address.isNotBlank()) {
 
-            "${place.name} 근처에 도착했습니다. 주소는 ${place.address}입니다."
+            "${place.name} 근처에 도착했습니다. 주소는 ${place.address} 입니다."
 
         } else {
 
             "${place.name} 근처에 도착했습니다."
+
         }
     }
 

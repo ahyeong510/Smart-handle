@@ -45,5 +45,8 @@ data class TourPlaceDto(
     val lng: Double,
 
     @SerializedName("address")
-    val address: String = ""
+    val address: String = "",
+
+    @SerializedName("description")
+    val description: String = ""
 )

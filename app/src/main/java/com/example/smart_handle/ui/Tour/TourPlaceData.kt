@@ -6,5 +6,8 @@ data class TourPlaceData(
     val name: String,
     val lat: Double,
     val lng: Double,
-    val address: String = ""
+    val address: String = "",
+
+    // ⭐ 관광 설명
+    val description: String = ""
 ) : Serializable

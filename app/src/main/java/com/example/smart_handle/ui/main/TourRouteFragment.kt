@@ -111,7 +111,7 @@ class TourRouteFragment : Fragment() {
                                         lat = place.lat,
                                         lng = place.lng,
                                         address = place.address,
-                                        description = place.description
+                                        description = place.description ?: ""
                                     )
                                 )
                             }

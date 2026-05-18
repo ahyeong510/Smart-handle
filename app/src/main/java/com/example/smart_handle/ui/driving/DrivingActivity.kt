@@ -136,7 +136,14 @@ class DrivingActivity : AppCompatActivity(),
             btnTestTts.setOnClickListener {
                 if (tourPlaces.isNotEmpty()) {
                     val place = tourPlaces[0]
+
+                    Log.d("TOUR_DESC", "name=${place.name}")
+                    Log.d("TOUR_DESC", "description=${place.description}")
+
                     val message = buildTourPlaceMessage(place)
+
+                    Log.d("TOUR_TTS_MESSAGE", message)
+
                     speakTourMessage(message)
 
                     Toast.makeText(

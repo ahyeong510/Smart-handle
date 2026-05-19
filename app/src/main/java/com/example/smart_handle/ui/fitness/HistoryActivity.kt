@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.example.smart_handle.R
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 
 class HistoryActivity : AppCompatActivity() {
 
@@ -32,10 +33,12 @@ class HistoryActivity : AppCompatActivity() {
         firestore.collection("users")
             .document(user.uid)
             .collection("ride_history")
-            .orderBy("createdAt")
-            .limitToLast(10)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(10)
             .get()
             .addOnSuccessListener { result ->
+
+                android.util.Log.d("RIDE_LOAD", "불러온 기록 개수: ${result.size()}")
 
                 if (result.isEmpty) {
                     textView.text = "지난 기록 없음"
@@ -60,8 +63,9 @@ class HistoryActivity : AppCompatActivity() {
 
                 textView.text = builder.toString()
             }
-            .addOnFailureListener {
-                textView.text = "기록 불러오기 실패"
+            .addOnFailureListener { e ->
+                android.util.Log.e("RIDE_LOAD", "기록 불러오기 실패", e)
+                textView.text = "기록 불러오기 실패: ${e.message}"
             }
     }
 }

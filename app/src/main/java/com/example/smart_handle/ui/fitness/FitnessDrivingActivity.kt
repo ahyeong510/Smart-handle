@@ -65,8 +65,10 @@ class FitnessDrivingActivity : AppCompatActivity() {
             .setTitle("얼마나 탔나요?")
             .setItems(percentOptions) { _, which ->
                 val completionPercent = percentValues[which]
-                saveToFirestore(satisfaction, completionPercent)
-                finish()
+                saveToFirestore(
+                    satisfaction,
+                    completionPercent
+                )
             }
             .setCancelable(false)
             .show()

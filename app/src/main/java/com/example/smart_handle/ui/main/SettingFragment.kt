@@ -98,19 +98,12 @@ class SettingFragment : Fragment() {
             .document(user.uid)
             .collection("ride_history")
             .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(10)
             .get()
             .addOnSuccessListener { result ->
                 btnHistory.isEnabled = true
 
-                val historyList = result.documents.mapNotNull { doc ->
-                    try {
-                        doc.toObject(RideHistory::class.java)
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
-
-                if (historyList.isEmpty()) {
+                if (result.isEmpty) {
                     AlertDialog.Builder(requireContext())
                         .setTitle("지난 기록")
                         .setMessage("저장된 운동 기록이 없어요.")
@@ -119,30 +112,38 @@ class SettingFragment : Fragment() {
                     return@addOnSuccessListener
                 }
 
-                val items = historyList.mapIndexed { index, item ->
-                    val satisfactionText = item.satisfaction ?: "-"
-                    val routeTypeText = when (item.routeType) {
+                val items = result.documents.mapIndexed { index, doc ->
+
+                    val routeType = doc.getString("routeType") ?: "-"
+                    val routeTypeText = when (routeType) {
                         "fitness" -> "운동"
+                        "tour" -> "관광지 코스"
                         "navigation" -> "길찾기"
-                        else -> item.routeType
+                        else -> routeType
                     }
 
-                    val durationText = if (item.actualDurationSec > 0) {
-                        "${item.actualDurationSec / 60}분"
+                    val distanceKm = doc.getDouble("distanceKm") ?: 0.0
+                    val durationMin = doc.getLong("durationMin") ?: 0L
+                    val actualDurationSec = doc.getLong("actualDurationSec") ?: 0L
+                    val satisfaction = doc.getString("satisfaction") ?: "-"
+                    val completionPercent = doc.getLong("completionPercent") ?: 0L
+
+                    val durationText = if (actualDurationSec > 0) {
+                        "${actualDurationSec / 60}분"
                     } else {
-                        "${item.durationMin}분"
+                        "${durationMin}분"
                     }
 
-                    val completionText = if (item.completionPercent > 0) {
-                        " / 주행률: ${item.completionPercent}%"
+                    val completionText = if (completionPercent > 0) {
+                        " / 주행률: ${completionPercent}%"
                     } else {
                         ""
                     }
 
                     "${index + 1}. [$routeTypeText] " +
-                            "${String.format("%.2f", item.distanceKm)} km / " +
+                            "${String.format("%.2f", distanceKm)} km / " +
                             "$durationText / " +
-                            "만족도: $satisfactionText" +
+                            "만족도: $satisfaction" +
                             completionText
                 }.toTypedArray()
 

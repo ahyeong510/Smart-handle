@@ -304,10 +304,30 @@ class DrivingActivity : AppCompatActivity(),
             "createdAt" to FieldValue.serverTimestamp()
         )
 
+        Log.d("RIDE_SAVE", "저장 시작")
+        Log.d("RIDE_SAVE", data.toString())
+
         firestore.collection("users")
             .document(user.uid)
             .collection("ride_history")
             .add(data)
+            .addOnSuccessListener {
+
+                android.util.Log.d(
+                    "RIDE_SAVE",
+                    "Firestore 저장 성공"
+                )
+
+                finish()
+            }
+            .addOnFailureListener { e ->
+
+                android.util.Log.e(
+                    "RIDE_SAVE",
+                    "Firestore 저장 실패",
+                    e
+                )
+            }
             .addOnSuccessListener {
                 Toast.makeText(this, "운동 기록 저장 완료", Toast.LENGTH_SHORT).show()
                 safeFinish()

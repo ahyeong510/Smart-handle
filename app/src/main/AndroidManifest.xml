@@ -1,19 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- ✅ 위치 권한 (BLE 스캔 + 지도용) -->
+    <!-- 위치 권한: 지도 + BLE 스캔 안정화용 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- ✅ 인터넷 (지도, API 통신용) -->
+    <!-- 인터넷: 지도, API 통신용 -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- ✅ Android 12 이상 블루투스 권한 -->
+    <!-- Android 12 이상 BLE 권한 -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+
+    <!-- Android 11 이하 블루투스 권한 -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
 
     <application
         android:allowBackup="true"
@@ -25,12 +32,10 @@
         android:enableOnBackInvokedCallback="true"
         android:usesCleartextTraffic="true">
 
-        <!-- ✅ Google 지도 API 키 -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyCW5MXLusoUzLSFiZGdirbZv7V2h6Zazw0" />
 
-        <!-- ✅ 앱 실행 시 첫 화면 -->
         <activity
             android:name=".ui.start.StartActivity"
             android:exported="true"
@@ -41,19 +46,16 @@
             </intent-filter>
         </activity>
 
-        <!-- ✅ 권한 요청 화면 -->
         <activity
             android:name=".ui.permission.PermissionActivity"
             android:exported="false"
             android:theme="@style/Theme.SmartHandle" />
 
-        <!-- ✅ 메인 탭 화면 -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
             android:theme="@style/Theme.SmartHandle" />
 
-        <!-- ✅ 주행 지도 화면 -->
         <activity
             android:name=".ui.driving.DrivingActivity"
             android:exported="false"
@@ -66,14 +68,14 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.SmartHandle" />
 
-        <!-- ✅ 목적지 선택 화면 -->
         <activity android:name=".mapselect.SelectLocationActivity" />
 
-        <!-- ✅ 지도 화면 -->
         <activity android:name=".maps.MapsActivity" />
+
         <activity android:name=".ui.fitness.FitnessRecommendResultActivity" />
 
         <activity android:name=".auth.SignupActivity" />
+
         <activity android:name=".auth.LoginActivity" />
 
         <activity android:name=".ui.fitness.HistoryActivity" />

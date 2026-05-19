@@ -5,10 +5,14 @@ import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.Spinner
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -23,6 +27,10 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
     private lateinit var btnLeft: Button
     private lateinit var btnRight: Button
 
+    private lateinit var spinnerLedDirection: Spinner
+    private lateinit var spinnerLedCount: Spinner
+    private lateinit var btnLedSend: Button
+
     private var isConnected = false
     private var readyToWrite = false
     private var connectedName: String? = null
@@ -30,12 +38,18 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
     private val permLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
             val granted = result.values.all { it }
-            if (granted) startConnectFlow()
-            else setStatus("⚠️ 권한 거부됨")
+
+            if (granted) {
+                startConnectFlow()
+            } else {
+                setStatus("⚠️ 권한 거부됨\n앱 설정에서 근처 기기/위치 권한을 허용해줘")
+            }
         }
 
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
     ): View {
         return inflater.inflate(R.layout.fragment_device, container, false)
     }
@@ -45,25 +59,29 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         super.onViewCreated(view, savedInstanceState)
 
         textStatus = view.findViewById(R.id.textStatus)
+
         btnConnect = view.findViewById(R.id.btnConnect)
         btnLeft = view.findViewById(R.id.btnLeft)
         btnRight = view.findViewById(R.id.btnRight)
 
-        // 처음 들어왔을 때 기본 상태
+        spinnerLedDirection = view.findViewById(R.id.spinnerLedDirection)
+        spinnerLedCount = view.findViewById(R.id.spinnerLedCount)
+        btnLedSend = view.findViewById(R.id.btnLedSend)
+
         btnLeft.isEnabled = false
         btnRight.isEnabled = false
+        btnLedSend.isEnabled = false
+
         setStatus("기기 연결 안됨 ✖")
 
-        // 🔥 BLE listener 연결 (싱글톤 상태를 바로 UI에 반영)
-        //  - BluetoothManager.attachListener 안에서
-        //    현재 연결 상태 / readyToWrite 상태를 즉시 한 번 호출해 줌
         BluetoothManager.attachListener(this)
+
+        setupLedUi()
 
         btnConnect.setOnClickListener {
             if (!isConnected) {
                 ensurePermissions()
             } else {
-                // 연결 된 상태에서 눌러도 BLE를 끊지 않음
                 setStatus("이미 연결됨")
             }
         }
@@ -85,45 +103,170 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
                 setStatus("⚠️ 아직 전송 준비 안됨")
             }
         }
+
+        btnLedSend.setOnClickListener {
+            if (!readyToWrite) {
+                setStatus("⚠️ 아직 전송 준비 안됨")
+                return@setOnClickListener
+            }
+
+            val direction = spinnerLedDirection.selectedItem.toString()
+            val count = spinnerLedCount.selectedItem.toString()
+
+            val command = "$direction,$count\n"
+
+            val ok = BluetoothManager.sendText(command)
+
+            if (ok) {
+                setStatus("📤 LED 전송: $direction,$count")
+            } else {
+                setStatus("⚠️ LED 전송 실패")
+            }
+        }
     }
 
-    /** 🔥 권한 체크 */
+    private fun setupLedUi() {
+        val directions = listOf("L", "R", "S")
+
+        val directionAdapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_dropdown_item,
+            directions
+        )
+
+        spinnerLedDirection.adapter = directionAdapter
+
+        updateCountSpinner("L")
+
+        spinnerLedDirection.onItemSelectedListener =
+            object : AdapterView.OnItemSelectedListener {
+
+                override fun onItemSelected(
+                    parent: AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long
+                ) {
+                    updateCountSpinner(directions[position])
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
+            }
+    }
+
+    private fun updateCountSpinner(direction: String) {
+        val counts = if (direction == "S") {
+            listOf("0")
+        } else {
+            listOf("1", "2", "3")
+        }
+
+        val countAdapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_dropdown_item,
+            counts
+        )
+
+        spinnerLedCount.adapter = countAdapter
+    }
+
     private fun ensurePermissions() {
         val needs = mutableListOf<String>()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_SCAN)
-                != PackageManager.PERMISSION_GRANTED
-            ) needs += Manifest.permission.BLUETOOTH_SCAN
+            if (
+                ContextCompat.checkSelfPermission(
+                    requireContext(),
+                    Manifest.permission.BLUETOOTH_SCAN
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                needs += Manifest.permission.BLUETOOTH_SCAN
+            }
 
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_CONNECT)
-                != PackageManager.PERMISSION_GRANTED
-            ) needs += Manifest.permission.BLUETOOTH_CONNECT
+            if (
+                ContextCompat.checkSelfPermission(
+                    requireContext(),
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                needs += Manifest.permission.BLUETOOTH_CONNECT
+            }
+
+            // 삼성/일부 기기 BLE 스캔 안정화용으로 위치 권한도 같이 요청
+            if (
+                ContextCompat.checkSelfPermission(
+                    requireContext(),
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                needs += Manifest.permission.ACCESS_FINE_LOCATION
+            }
+
+            if (
+                ContextCompat.checkSelfPermission(
+                    requireContext(),
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                needs += Manifest.permission.ACCESS_COARSE_LOCATION
+            }
+
         } else {
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED
-            ) needs += Manifest.permission.ACCESS_FINE_LOCATION
+            if (
+                ContextCompat.checkSelfPermission(
+                    requireContext(),
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                needs += Manifest.permission.ACCESS_FINE_LOCATION
+            }
+
+            if (
+                ContextCompat.checkSelfPermission(
+                    requireContext(),
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                needs += Manifest.permission.ACCESS_COARSE_LOCATION
+            }
         }
 
-        if (needs.isEmpty()) startConnectFlow()
-        else permLauncher.launch(needs.toTypedArray())
+        if (needs.isEmpty()) {
+            startConnectFlow()
+        } else {
+            permLauncher.launch(needs.toTypedArray())
+        }
     }
 
-    /** 🔥 스캔 + 연결 시작 */
     private fun startConnectFlow() {
+        if (!isLocationEnabled()) {
+            setStatus("⚠️ 위치 서비스가 꺼져 있음\n휴대폰 위치를 켠 뒤 다시 연결해줘")
+            return
+        }
+
         setStatus("🔍 기기 검색 중…")
         BluetoothManager.startScanAndConnect()
     }
 
-    // ======================================================
-    // BLE Listener 콜백
-    // ======================================================
+    private fun isLocationEnabled(): Boolean {
+        return try {
+            val mode = Settings.Secure.getInt(
+                requireContext().contentResolver,
+                Settings.Secure.LOCATION_MODE
+            )
+            mode != Settings.Secure.LOCATION_MODE_OFF
+        } catch (_: Exception) {
+            true
+        }
+    }
 
-    override fun onStateChanged(connected: Boolean, deviceName: String?) {
+    override fun onStateChanged(
+        connected: Boolean,
+        deviceName: String?
+    ) {
         isConnected = connected
         connectedName = deviceName
 
-        // 🔐 프래그먼트/뷰가 살아 있을 때만 UI 건드리기
         if (!isAdded || view == null) return
 
         activity?.runOnUiThread {
@@ -149,6 +292,7 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
 
             btnLeft.isEnabled = ready
             btnRight.isEnabled = ready
+            btnLedSend.isEnabled = ready
 
             if (ready) {
                 setStatus("📡 전송 준비됨")
@@ -163,19 +307,23 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
 
         activity?.runOnUiThread {
             if (!isAdded || view == null) return@runOnUiThread
-            // 필요하면 textStatus 나 별도 로그뷰에 추가해서 디버깅
-            // textStatus.append("\n$msg")
+            setStatus(msg)
         }
     }
 
     private fun setStatus(msg: String) {
-        val prefix = if (isConnected) "${connectedName ?: "기기"}\n" else ""
+        val prefix =
+            if (isConnected) {
+                "${connectedName ?: "기기"}\n"
+            } else {
+                ""
+            }
+
         textStatus.text = prefix + msg
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        // 🔥 연결은 유지하고, 화면만 listener 해제
         BluetoothManager.attachListener(null)
     }
 }

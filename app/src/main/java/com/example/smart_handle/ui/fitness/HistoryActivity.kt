@@ -59,6 +59,7 @@ class HistoryActivity : AppCompatActivity() {
                                 "주행률: ${percent}%\n" +
                                 "만족도: ${satisfaction}\n\n"
                     )
+
                 }
 
                 textView.text = builder.toString()

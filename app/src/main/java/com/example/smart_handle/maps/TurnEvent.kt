@@ -4,7 +4,6 @@ import android.os.Parcel
 import android.os.Parcelable
 import com.google.android.gms.maps.model.LatLng
 
-// 🔹 좌/우/직진 종류
 enum class TurnType {
     LEFT,
     RIGHT,
@@ -12,33 +11,32 @@ enum class TurnType {
 }
 
 data class TurnEvent(
-    val location: LatLng,     // 턴 위치 (위도/경도)
+    val location: LatLng,
     val type: TurnType,
-    var isContinuous: Boolean = false,// 턴 종류
-    var trigger50: Boolean = false,  // 50m 알림 했는지
-    var trigger25: Boolean = false   // 25m 알림 했는지
+    var isContinuous: Boolean = false,
+    var trigger50: Boolean = false,
+    var trigger25: Boolean = false
 ) : Parcelable {
 
-    // Parcel 에서 읽어오는 생성자
     constructor(parcel: Parcel) : this(
         location = LatLng(
-            parcel.readDouble(),   // latitude
-            parcel.readDouble()    // longitude
+            parcel.readDouble(),
+            parcel.readDouble()
         ),
         type = TurnType.valueOf(
             parcel.readString() ?: TurnType.STRAIGHT.name
         ),
+        isContinuous = parcel.readByte() != 0.toByte(),
         trigger50 = parcel.readByte() != 0.toByte(),
         trigger25 = parcel.readByte() != 0.toByte()
     )
 
     override fun writeToParcel(parcel: Parcel, flags: Int) {
-        // 위치
         parcel.writeDouble(location.latitude)
         parcel.writeDouble(location.longitude)
-        // enum 은 name 문자열로 저장
         parcel.writeString(type.name)
-        // 플래그들
+
+        parcel.writeByte(if (isContinuous) 1 else 0)
         parcel.writeByte(if (trigger50) 1 else 0)
         parcel.writeByte(if (trigger25) 1 else 0)
     }

@@ -128,6 +128,19 @@ class DrivingActivity : AppCompatActivity(),
 
         val btnTestTts = findViewById<Button>(R.id.btn_test_tts)
 
+        btnTestTts.visibility = View.VISIBLE //임시 테스트
+
+        btnTestTts.setOnClickListener {
+            if (readyToWrite) {
+                Log.d("BLE_TEST", "Send L")
+                BluetoothManager.sendText("L")
+                Toast.makeText(this, "L 전송", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "BLE 아직 연결 안 됨", Toast.LENGTH_SHORT).show()
+                Log.d("BLE_TEST", "readyToWrite = false")
+            }
+        }
+
         if (isTourRoute()) {
             btnTestTts.visibility = View.VISIBLE
 
@@ -162,11 +175,14 @@ class DrivingActivity : AppCompatActivity(),
             btnTestTts.visibility = View.GONE
         }
 
+
+
         BluetoothManager.attachListener(this)
         fused = LocationServices.getFusedLocationProviderClient(this)
 
         intent.getParcelableArrayListExtra<TurnEvent>("turn_events")?.let {
             turnEvents.addAll(it)
+            analyzeTurnEventsForLed()
         }
 
         intent.getParcelableArrayListExtra<LatLng>("route_points")?.let {
@@ -504,22 +520,27 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     private fun buildTourPlaceMessage(place: TourPlaceData): String {
-        val title = when {
-            place.tourTitle.isNotBlank() -> place.tourTitle
+        val displayName = when {
             place.name.isNotBlank() -> place.name
+            place.tourTitle.isNotBlank() -> place.tourTitle
             else -> "관광지"
         }
 
+        val tourTitle = place.tourTitle.trim()
         val description = place.description?.trim().orEmpty()
 
         return if (description.isNotBlank() && description != "설명 없음") {
-            "$title 근처에 도착했습니다. $description"
+            if (tourTitle.isNotBlank() && tourTitle != displayName) {
+                "$displayName 근처입니다. 관련 관광 정보로 $tourTitle 설명을 안내합니다. $description"
+            } else {
+                "$displayName 근처에 도착했습니다. $description"
+            }
         } else if (place.addr1.isNotBlank()) {
-            "$title 근처에 도착했습니다. 주소는 ${place.addr1} 입니다."
+            "$displayName 근처에 도착했습니다. 주소는 ${place.addr1} 입니다."
         } else if (place.address.isNotBlank() && place.address != "주소 없음") {
-            "$title 근처에 도착했습니다. 주소는 ${place.address} 입니다."
+            "$displayName 근처에 도착했습니다. 주소는 ${place.address} 입니다."
         } else {
-            "$title 근처에 도착했습니다."
+            "$displayName 근처에 도착했습니다."
         }
     }
 
@@ -531,6 +552,37 @@ class DrivingActivity : AppCompatActivity(),
             "tour_place_guide"
         )
     }
+
+    private fun analyzeTurnEventsForLed() {
+        markContinuousTurns()
+    }
+
+    private fun markContinuousTurns() {
+        if (turnEvents.size < 2) return
+
+        for (i in 0 until turnEvents.size - 1) {
+            val current = turnEvents[i]
+            val next = turnEvents[i + 1]
+
+            val sameDirection =
+                (current.type == TurnType.LEFT && next.type == TurnType.LEFT) ||
+                        (current.type == TurnType.RIGHT && next.type == TurnType.RIGHT)
+
+            val closeDistance = distance(current.location, next.location) <= 50f
+
+            if (sameDirection && closeDistance) {
+                current.isContinuous = true
+                next.isContinuous = true
+
+
+                Log.d(
+                    "LED_ANALYZE",
+                    "연속 회전 감지: ${current.type}, distance=${distance(current.location, next.location)}"
+                )
+            }
+        }
+    }
+
 
     private fun checkTurnEvent(current: LatLng) {
         if (rideFinished) return
@@ -566,18 +618,18 @@ class DrivingActivity : AppCompatActivity(),
         }
 
         if (!target.trigger50 && dist < 50 && dist >= 25) {
-            sendVibration(target.type, target.isContinuous)
+            sendGuideCommand(target)
             target.trigger50 = true
         }
 
         if (!target.trigger25 && dist < 25 && dist >= 10) {
-            sendVibration(target.type, target.isContinuous)
+            sendGuideCommand(target)
             target.trigger25 = true
         }
 
         if (dist < 10 && dist >= 3) {
             if (!isRepeating) {
-                startRepeating(target.type, target.isContinuous)
+                startRepeating(target)
                 isRepeating = true
             }
         }
@@ -620,6 +672,33 @@ class DrivingActivity : AppCompatActivity(),
         handler.post(runnable)
     }
 
+    private fun sendGuideCommand(target: TurnEvent) {
+        if (!readyToWrite) return
+
+        when {
+            target.type == TurnType.LEFT && target.isContinuous -> {
+                Log.d("LED_COMMAND", "LC - 연속 좌회전")
+                BluetoothManager.sendText("LC")
+            }
+
+            target.type == TurnType.RIGHT && target.isContinuous -> {
+                Log.d("LED_COMMAND", "RC - 연속 우회전")
+                BluetoothManager.sendText("RC")
+            }
+
+            target.type == TurnType.LEFT -> {
+                Log.d("LED_COMMAND", "L - 일반 좌회전")
+                BluetoothManager.sendText("L")
+            }
+
+            target.type == TurnType.RIGHT -> {
+                Log.d("LED_COMMAND", "R - 일반 우회전")
+                BluetoothManager.sendText("R")
+            }
+
+            else -> {}
+        }
+    }
     private fun sendVibration(type: TurnType, isContinuous: Boolean) {
         if (!readyToWrite) return
 
@@ -648,11 +727,11 @@ class DrivingActivity : AppCompatActivity(),
         }
     }
 
-    private fun startRepeating(type: TurnType, isContinuous: Boolean) {
+    private fun startRepeating(target: TurnEvent) {
         repeatHandler = Handler(Looper.getMainLooper())
         repeatRunnable = object : Runnable {
             override fun run() {
-                sendVibration(type, isContinuous)
+                sendGuideCommand(target)
                 repeatHandler?.postDelayed(this, 2000)
             }
         }

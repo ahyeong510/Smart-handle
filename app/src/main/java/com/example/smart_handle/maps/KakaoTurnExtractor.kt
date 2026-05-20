@@ -49,39 +49,6 @@ object KakaoTurnExtractor {
             Log.e("TurnExtractor", "extractTurnEvents error: ${e.message}", e)
         }
 
-        // 🔥 여기 핵심 변경
-        return markContinuousTurns(results)
-    }
-
-    // 🔥 거리 계산 함수
-    private fun distanceMeters(a: LatLng, b: LatLng): Float {
-        val result = FloatArray(1)
-        android.location.Location.distanceBetween(
-            a.latitude, a.longitude,
-            b.latitude, b.longitude,
-            result
-        )
-        return result[0]
-    }
-
-    // 🔥 연속 좌/우회전 판별
-    private fun markContinuousTurns(events: List<TurnEvent>): List<TurnEvent> {
-        if (events.size < 2) return events
-
-        for (i in 0 until events.size - 1) {
-            val current = events[i]
-            val next = events[i + 1]
-
-            val sameDirection =
-                (current.type == TurnType.LEFT && next.type == TurnType.LEFT) ||
-                        (current.type == TurnType.RIGHT && next.type == TurnType.RIGHT)
-
-            val closeDistance = distanceMeters(current.location, next.location) <= 35f
-
-            if (sameDirection && closeDistance) {
-                current.isContinuous = true
-            }
-        }
-        return events
+        return results
     }
 }

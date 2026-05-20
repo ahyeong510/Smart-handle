@@ -14,7 +14,9 @@ import com.google.android.gms.maps.model.LatLng
 
 class FitnessRecommendResultActivity : AppCompatActivity() {
 
-    private lateinit var tvResultTitle: TextView
+    private var routeMode: String = "fitness"
+
+    private var tvResultTitle: TextView? = null
 
     private lateinit var tvRoute1: TextView
     private lateinit var tvRoute2: TextView
@@ -23,8 +25,6 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
     private lateinit var btnRoute1: Button
     private lateinit var btnRoute2: Button
     private lateinit var btnRoute3: Button
-
-    private var routeMode: String = "fitness"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,29 +42,21 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
         btnRoute2 = findViewById(R.id.btnRoute2)
         btnRoute3 = findViewById(R.id.btnRoute3)
 
-        setupTitle()
+        tvResultTitle?.text = if (isTourMode()) {
+            "추천 관광 경로 TOP 3"
+        } else {
+            "추천 운동 경로 TOP 3"
+        }
 
         val routes = getRouteListFromIntent()
 
         if (routes.isEmpty()) {
-            Toast.makeText(
-                this,
-                "추천 경로를 불러오지 못했습니다.",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(this, "추천 경로를 불러오지 못했습니다", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
 
         setupRouteViews(routes)
-    }
-
-    private fun setupTitle() {
-        tvResultTitle.text = if (isTourMode()) {
-            "추천 관광 경로 TOP 3"
-        } else {
-            "추천 운동 경로 TOP 3"
-        }
     }
 
     private fun isTourMode(): Boolean {
@@ -89,9 +81,7 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
         if (routes.size >= 1) {
             bindRoute(tvRoute1, routes[0])
             btnRoute1.isEnabled = true
-            btnRoute1.setOnClickListener {
-                onRouteSelected(routes[0])
-            }
+            btnRoute1.setOnClickListener { onRouteSelected(routes[0]) }
         } else {
             tvRoute1.text = "추천 경로 없음"
             btnRoute1.isEnabled = false
@@ -100,9 +90,7 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
         if (routes.size >= 2) {
             bindRoute(tvRoute2, routes[1])
             btnRoute2.isEnabled = true
-            btnRoute2.setOnClickListener {
-                onRouteSelected(routes[1])
-            }
+            btnRoute2.setOnClickListener { onRouteSelected(routes[1]) }
         } else {
             tvRoute2.text = "추천 경로 없음"
             btnRoute2.isEnabled = false
@@ -111,9 +99,7 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
         if (routes.size >= 3) {
             bindRoute(tvRoute3, routes[2])
             btnRoute3.isEnabled = true
-            btnRoute3.setOnClickListener {
-                onRouteSelected(routes[2])
-            }
+            btnRoute3.setOnClickListener { onRouteSelected(routes[2]) }
         } else {
             tvRoute3.text = "추천 경로 없음"
             btnRoute3.isEnabled = false
@@ -121,11 +107,7 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
     }
 
     private fun bindRoute(textView: TextView, route: FitnessRouteOption) {
-        textView.text = makeRouteText(route)
-    }
-
-    private fun makeRouteText(route: FitnessRouteOption): String {
-        return if (isTourMode()) {
+        textView.text = if (isTourMode()) {
             """
             ${route.title}
             거리: ${route.distanceKm} km
@@ -145,28 +127,17 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
 
     private fun onRouteSelected(route: FitnessRouteOption) {
         if (route.routePoints.isEmpty()) {
-            Toast.makeText(
-                this,
-                "경로 좌표가 없습니다.",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(this, "경로 좌표가 없습니다.", Toast.LENGTH_SHORT).show()
             return
         }
 
         val latLngPoints = ArrayList<LatLng>()
-
         for (point in route.routePoints) {
-            latLngPoints.add(
-                LatLng(point.lat, point.lng)
-            )
+            latLngPoints.add(LatLng(point.lat, point.lng))
         }
 
         if (latLngPoints.size < 2) {
-            Toast.makeText(
-                this,
-                "주행에 필요한 경로 데이터가 부족합니다.",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(this, "주행에 필요한 경로 데이터가 부족합니다.", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -174,13 +145,11 @@ class FitnessRecommendResultActivity : AppCompatActivity() {
 
         val drivingIntent = Intent(this, DrivingActivity::class.java).apply {
             putExtra("routeType", routeMode)
-
             putExtra("routeId", route.routeId)
             putExtra("distanceKm", route.distanceKm)
             putExtra("durationMin", route.durationMin)
             putExtra("elevationGain", route.elevationGain)
             putExtra("turnCount", route.turnCount)
-
             putParcelableArrayListExtra("turn_events", turnEvents)
             putParcelableArrayListExtra("route_points", latLngPoints)
 

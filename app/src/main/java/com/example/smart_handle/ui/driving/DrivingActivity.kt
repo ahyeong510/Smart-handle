@@ -98,7 +98,7 @@ class DrivingActivity : AppCompatActivity(),
     private var isTtsReady = false
 
     companion object {
-        private const val TOUR_PLACE_TRIGGER_DISTANCE_M = 30f
+        private const val TOUR_PLACE_TRIGGER_DISTANCE_M = 70f
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

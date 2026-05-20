@@ -202,6 +202,7 @@ class FitnessRouteFragment : Fragment() {
                     .take(10)
                     .mapNotNull { doc ->
                         try {
+                            val distanceKm = doc.getDouble("distanceKm") ?: 0.0
                             val elevationGain = (doc.getLong("elevationGain") ?: 0L).toInt()
                             val turnCount = (doc.getLong("turnCount") ?: 0L).toInt()
                             val durationMin = (doc.getLong("durationMin") ?: 0L).toInt()
@@ -209,11 +210,12 @@ class FitnessRouteFragment : Fragment() {
                             val satisfaction = doc.getString("satisfaction") ?: "보통"
 
                             RideHistoryItem(
-                                elevationGain,
-                                turnCount,
-                                durationMin,
-                                completionPercent,
-                                satisfaction
+                                distanceKm = distanceKm,
+                                elevationGain = elevationGain,
+                                turnCount = turnCount,
+                                durationMin = durationMin,
+                                completionPercent = completionPercent,
+                                satisfaction = satisfaction
                             )
                         } catch (e: Exception) {
                             null

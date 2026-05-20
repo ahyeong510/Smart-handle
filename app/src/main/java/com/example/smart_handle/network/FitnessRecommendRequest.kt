@@ -3,6 +3,9 @@ package com.example.smart_handle.network
 import com.google.gson.annotations.SerializedName
 
 data class RideHistoryItem(
+    @SerializedName("distanceKm")
+    val distanceKm: Double,
+
     @SerializedName("elevationGain")
     val elevationGain: Int,
 

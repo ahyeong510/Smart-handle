@@ -504,22 +504,27 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     private fun buildTourPlaceMessage(place: TourPlaceData): String {
-        val title = when {
-            place.tourTitle.isNotBlank() -> place.tourTitle
+        val displayName = when {
             place.name.isNotBlank() -> place.name
+            place.tourTitle.isNotBlank() -> place.tourTitle
             else -> "관광지"
         }
 
+        val tourTitle = place.tourTitle.trim()
         val description = place.description?.trim().orEmpty()
 
         return if (description.isNotBlank() && description != "설명 없음") {
-            "$title 근처에 도착했습니다. $description"
+            if (tourTitle.isNotBlank() && tourTitle != displayName) {
+                "$displayName 근처입니다. 관련 관광 정보로 $tourTitle 설명을 안내합니다. $description"
+            } else {
+                "$displayName 근처에 도착했습니다. $description"
+            }
         } else if (place.addr1.isNotBlank()) {
-            "$title 근처에 도착했습니다. 주소는 ${place.addr1} 입니다."
+            "$displayName 근처에 도착했습니다. 주소는 ${place.addr1} 입니다."
         } else if (place.address.isNotBlank() && place.address != "주소 없음") {
-            "$title 근처에 도착했습니다. 주소는 ${place.address} 입니다."
+            "$displayName 근처에 도착했습니다. 주소는 ${place.address} 입니다."
         } else {
-            "$title 근처에 도착했습니다."
+            "$displayName 근처에 도착했습니다."
         }
     }
 

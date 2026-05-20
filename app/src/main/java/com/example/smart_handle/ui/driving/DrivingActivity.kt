@@ -91,7 +91,7 @@ class DrivingActivity : AppCompatActivity(),
 
     private var routeType: String = "navigation"
 
-    // ⭐ 관광모드 TTS 관련
+    // 관광모드 TTS 관련
     private val tourPlaces = arrayListOf<TourPlaceData>()
     private val spokenTourPlaceNames = mutableSetOf<String>()
     private var tts: TextToSpeech? = null
@@ -105,7 +105,7 @@ class DrivingActivity : AppCompatActivity(),
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driving_navigation)
 
-        Log.d("VIBRATION", "🔥 DrivingActivity started")
+        Log.d("VIBRATION", "DrivingActivity started")
 
         database = AppDatabase.getDatabase(this)
         rideDao = database.rideDao()
@@ -122,8 +122,6 @@ class DrivingActivity : AppCompatActivity(),
         turnDistance = findViewById(R.id.turnDistance)
         turnTypeText = findViewById(R.id.turnTypeText)
 
-
-
         findViewById<Button>(R.id.btn_stop_route).setOnClickListener {
             handleRideFinishedByUser()
         }
@@ -138,6 +136,7 @@ class DrivingActivity : AppCompatActivity(),
                     val place = tourPlaces[0]
 
                     Log.d("TOUR_DESC", "name=${place.name}")
+                    Log.d("TOUR_DESC", "tourTitle=${place.tourTitle}")
                     Log.d("TOUR_DESC", "description=${place.description}")
 
                     val message = buildTourPlaceMessage(place)
@@ -148,7 +147,7 @@ class DrivingActivity : AppCompatActivity(),
 
                     Toast.makeText(
                         this,
-                        "${place.name} TTS 테스트",
+                        "${place.tourTitle.ifBlank { place.name }} TTS 테스트",
                         Toast.LENGTH_SHORT
                     ).show()
                 } else {
@@ -191,7 +190,7 @@ class DrivingActivity : AppCompatActivity(),
         return routeType == "tour"
     }
 
-    @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION", "UNCHECKED_CAST")
     private fun loadTourPlacesFromIntent() {
         if (!isTourRoute()) return
 
@@ -274,7 +273,11 @@ class DrivingActivity : AppCompatActivity(),
 
         val user = FirebaseAuth.getInstance().currentUser
         if (user == null) {
-            Toast.makeText(this, "로그인 정보가 없어 운동 기록 저장을 건너뜁니다.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "로그인 정보가 없어 운동 기록 저장을 건너뜁니다.",
+                Toast.LENGTH_SHORT
+            ).show()
             safeFinish()
             return
         }
@@ -312,23 +315,7 @@ class DrivingActivity : AppCompatActivity(),
             .collection("ride_history")
             .add(data)
             .addOnSuccessListener {
-
-                android.util.Log.d(
-                    "RIDE_SAVE",
-                    "Firestore 저장 성공"
-                )
-
-                finish()
-            }
-            .addOnFailureListener { e ->
-
-                android.util.Log.e(
-                    "RIDE_SAVE",
-                    "Firestore 저장 실패",
-                    e
-                )
-            }
-            .addOnSuccessListener {
+                Log.d("RIDE_SAVE", "Firestore 저장 성공")
                 Toast.makeText(this, "운동 기록 저장 완료", Toast.LENGTH_SHORT).show()
                 safeFinish()
             }
@@ -424,7 +411,11 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     private fun checkLocationPermission() {
-        val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+        val fine = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+
         if (fine != PackageManager.PERMISSION_GRANTED) {
             permLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
         } else {
@@ -445,7 +436,11 @@ class DrivingActivity : AppCompatActivity(),
             .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
             .build()
 
-        fused.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
+        fused.requestLocationUpdates(
+            locationRequest,
+            locationCallback,
+            Looper.getMainLooper()
+        )
     }
 
     private val locationCallback = object : LocationCallback() {
@@ -477,41 +472,54 @@ class DrivingActivity : AppCompatActivity(),
         if (!isTtsReady || tourPlaces.isEmpty()) return
 
         for (place in tourPlaces) {
-            if (spokenTourPlaceNames.contains(place.name)) continue
+            val uniqueKey = if (place.contentId.isNotBlank()) {
+                place.contentId
+            } else {
+                place.name
+            }
+
+            if (spokenTourPlaceNames.contains(uniqueKey)) continue
 
             val placeLatLng = LatLng(place.lat, place.lng)
             val dist = distance(current, placeLatLng)
 
             if (dist <= TOUR_PLACE_TRIGGER_DISTANCE_M) {
-                spokenTourPlaceNames.add(place.name)
+                spokenTourPlaceNames.add(uniqueKey)
 
                 val message = buildTourPlaceMessage(place)
                 speakTourMessage(message)
 
                 turnCard.visibility = View.VISIBLE
                 turnDistance.text = ""
-                turnTypeText.text = "${place.name} 근처에 도착했습니다"
+                turnTypeText.text =
+                    "${place.tourTitle.ifBlank { place.name }} 근처에 도착했습니다"
 
-                Log.d("TOUR_TTS", "관광지 도착 안내: ${place.name}, 거리=${dist.roundToInt()}m")
+                Log.d(
+                    "TOUR_TTS",
+                    "관광지 도착 안내: ${place.tourTitle.ifBlank { place.name }}, 거리=${dist.roundToInt()}m"
+                )
                 break
             }
         }
     }
 
     private fun buildTourPlaceMessage(place: TourPlaceData): String {
+        val title = when {
+            place.tourTitle.isNotBlank() -> place.tourTitle
+            place.name.isNotBlank() -> place.name
+            else -> "관광지"
+        }
 
-        return if (!place.description.isNullOrBlank()) {
+        val description = place.description?.trim().orEmpty()
 
-            "${place.name} 근처에 도착했습니다. ${place.description}"
-
-        } else if (place.address.isNotBlank()) {
-
-            "${place.name} 근처에 도착했습니다. 주소는 ${place.address} 입니다."
-
+        return if (description.isNotBlank() && description != "설명 없음") {
+            "$title 근처에 도착했습니다. $description"
+        } else if (place.addr1.isNotBlank()) {
+            "$title 근처에 도착했습니다. 주소는 ${place.addr1} 입니다."
+        } else if (place.address.isNotBlank() && place.address != "주소 없음") {
+            "$title 근처에 도착했습니다. 주소는 ${place.address} 입니다."
         } else {
-
-            "${place.name} 근처에 도착했습니다."
-
+            "$title 근처에 도착했습니다."
         }
     }
 
@@ -546,10 +554,12 @@ class DrivingActivity : AppCompatActivity(),
                 turnIcon.setImageResource(R.drawable.ic_turn_left)
                 turnTypeText.text = "좌회전"
             }
+
             TurnType.RIGHT -> {
                 turnIcon.setImageResource(R.drawable.ic_turn_right)
                 turnTypeText.text = "우회전"
             }
+
             TurnType.STRAIGHT -> {
                 turnTypeText.text = "직진"
             }
@@ -658,7 +668,13 @@ class DrivingActivity : AppCompatActivity(),
 
     private fun distance(a: LatLng, b: LatLng): Float {
         val arr = FloatArray(1)
-        Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, arr)
+        Location.distanceBetween(
+            a.latitude,
+            a.longitude,
+            b.latitude,
+            b.longitude,
+            arr
+        )
         return arr[0]
     }
 

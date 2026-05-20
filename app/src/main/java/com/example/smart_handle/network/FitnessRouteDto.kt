@@ -28,7 +28,7 @@ data class FitnessRouteDto(
     @SerializedName("polyline")
     val polyline: List<List<Double>> = emptyList(),
 
-    // ⭐ 관광모드용 관광지 목록
+    // 관광모드용 관광지 목록
     @SerializedName("tour_places")
     val tourPlaces: List<TourPlaceDto> = emptyList()
 )
@@ -36,16 +36,28 @@ data class FitnessRouteDto(
 data class TourPlaceDto(
 
     @SerializedName("name")
-    val name: String,
+    val name: String = "",
 
     @SerializedName("lat")
-    val lat: Double,
+    val lat: Double = 0.0,
 
     @SerializedName("lng")
-    val lng: Double,
+    val lng: Double = 0.0,
 
     @SerializedName("address")
     val address: String = "",
+
+    @SerializedName("content_id")
+    val contentId: String = "",
+
+    @SerializedName("content_type_id")
+    val contentTypeId: String = "",
+
+    @SerializedName("tour_title")
+    val tourTitle: String = "",
+
+    @SerializedName("addr1")
+    val addr1: String = "",
 
     @SerializedName("description")
     val description: String = ""

@@ -51,13 +51,21 @@ class TourRouteFragment : Fragment() {
         val radiusKm = etRadius.text.toString().trim().toDoubleOrNull() ?: 5.0
 
         if (radiusKm < 3.0 || radiusKm > 10.0) {
-            Toast.makeText(requireContext(), "반경은 3~10km 사이로 입력해주세요.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                requireContext(),
+                "반경은 3~10km 사이로 입력해주세요.",
+                Toast.LENGTH_SHORT
+            ).show()
             return
         }
 
         getCurrentLocation { location ->
             if (location == null) {
-                Toast.makeText(requireContext(), "현재 위치를 가져올 수 없습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(),
+                    "현재 위치를 가져올 수 없습니다.",
+                    Toast.LENGTH_SHORT
+                ).show()
                 return@getCurrentLocation
             }
 
@@ -81,14 +89,22 @@ class TourRouteFragment : Fragment() {
                                 "TourRouteAPI",
                                 "관광지 추천 요청 실패 code=${response.code()}, error=${response.errorBody()?.string()}"
                             )
-                            Toast.makeText(requireContext(), "관광지 추천 요청 실패", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                requireContext(),
+                                "관광지 추천 요청 실패",
+                                Toast.LENGTH_SHORT
+                            ).show()
                             return
                         }
 
                         val routes = response.body()?.routes ?: emptyList()
 
                         if (routes.isEmpty()) {
-                            Toast.makeText(requireContext(), "추천 관광지 경로가 없습니다.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                requireContext(),
+                                "추천 관광지 경로가 없습니다.",
+                                Toast.LENGTH_SHORT
+                            ).show()
                             return
                         }
 
@@ -113,11 +129,15 @@ class TourRouteFragment : Fragment() {
                             for (place in route.tourPlaces) {
                                 tourPlaces.add(
                                     TourPlaceData(
-                                        name = place.name ?: "이름 없음",
+                                        name = place.name.ifBlank { "이름 없음" },
                                         lat = place.lat,
                                         lng = place.lng,
-                                        address = place.address ?: "주소 없음",
-                                        description = place.description ?: "설명 없음"
+                                        address = place.address.ifBlank { "주소 없음" },
+                                        contentId = place.contentId,
+                                        contentTypeId = place.contentTypeId,
+                                        tourTitle = place.tourTitle,
+                                        addr1 = place.addr1,
+                                        description = place.description.ifBlank { "설명 없음" }
                                     )
                                 )
                             }
@@ -137,7 +157,10 @@ class TourRouteFragment : Fragment() {
                             )
                         }
 
-                        val intent = Intent(requireContext(), FitnessRecommendResultActivity::class.java).apply {
+                        val intent = Intent(
+                            requireContext(),
+                            FitnessRecommendResultActivity::class.java
+                        ).apply {
                             putExtra("route_mode", "tour")
                             putExtra("fitness_routes", options)
                         }
@@ -145,7 +168,10 @@ class TourRouteFragment : Fragment() {
                         startActivity(intent)
                     }
 
-                    override fun onFailure(call: Call<TourRecommendResponse>, t: Throwable) {
+                    override fun onFailure(
+                        call: Call<TourRecommendResponse>,
+                        t: Throwable
+                    ) {
                         Log.e("TourRouteAPI", "관광지 경로 요청 실패", t)
 
                         if (!isAdded) return
@@ -162,7 +188,8 @@ class TourRouteFragment : Fragment() {
 
     @SuppressLint("MissingPermission")
     private fun getCurrentLocation(onResult: (Location?) -> Unit) {
-        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
+        val fusedLocationClient =
+            LocationServices.getFusedLocationProviderClient(requireActivity())
 
         fusedLocationClient.lastLocation
             .addOnSuccessListener { location ->

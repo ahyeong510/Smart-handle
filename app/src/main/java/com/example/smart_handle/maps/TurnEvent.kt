@@ -16,7 +16,9 @@ data class TurnEvent(
     val type: TurnType,
     var isContinuous: Boolean = false,// 턴 종류
     var trigger50: Boolean = false,  // 50m 알림 했는지
-    var trigger25: Boolean = false   // 25m 알림 했는지
+    var trigger25: Boolean = false,   // 25m 알림 했는지
+    var isComplexArea: Boolean = false,
+    var ledRequired: Boolean = false
 ) : Parcelable {
 
     // Parcel 에서 읽어오는 생성자

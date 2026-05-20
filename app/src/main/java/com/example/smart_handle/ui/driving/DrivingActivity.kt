@@ -168,6 +168,7 @@ class DrivingActivity : AppCompatActivity(),
 
         intent.getParcelableArrayListExtra<TurnEvent>("turn_events")?.let {
             turnEvents.addAll(it)
+            analyzeTurnEventsForLed()
         }
 
         intent.getParcelableArrayListExtra<LatLng>("route_points")?.let {
@@ -524,6 +525,50 @@ class DrivingActivity : AppCompatActivity(),
         )
     }
 
+    private fun analyzeTurnEventsForLed() {
+        markContinuousTurns()
+        markComplexAreas()
+    }
+
+    private fun markContinuousTurns() {
+        if (turnEvents.size < 2) return
+
+        for (i in 0 until turnEvents.size - 1) {
+            val current = turnEvents[i]
+            val next = turnEvents[i + 1]
+
+            val sameDirection =
+                (current.type == TurnType.LEFT && next.type == TurnType.LEFT) ||
+                        (current.type == TurnType.RIGHT && next.type == TurnType.RIGHT)
+
+            val closeDistance = distance(current.location, next.location) <= 35f
+
+            if (sameDirection && closeDistance) {
+                current.isContinuous = true
+                next.isContinuous = true
+
+                current.ledRequired = true
+                next.ledRequired = true
+
+                Log.d("LED_ANALYZE", "연속 회전 감지: ${current.type}, distance=${distance(current.location, next.location)}")
+            }
+        }
+    }
+
+    private fun markComplexAreas() {
+        for (event in turnEvents) {
+            val nearbyTurnCount = turnEvents.count { other ->
+                distance(event.location, other.location) <= 50f
+            }
+
+            if (nearbyTurnCount >= 3) {
+                event.isComplexArea = true
+                event.ledRequired = true
+
+                Log.d("LED_ANALYZE", "복잡 교차로 감지: nearbyTurnCount=$nearbyTurnCount")
+            }
+        }
+    }
     private fun checkTurnEvent(current: LatLng) {
         if (rideFinished) return
 
@@ -556,12 +601,12 @@ class DrivingActivity : AppCompatActivity(),
         }
 
         if (!target.trigger50 && dist < 50 && dist >= 25) {
-            sendVibration(target.type, target.isContinuous)
+            sendGuideCommand(target)
             target.trigger50 = true
         }
 
         if (!target.trigger25 && dist < 25 && dist >= 10) {
-            sendVibration(target.type, target.isContinuous)
+            sendGuideCommand(target)
             target.trigger25 = true
         }
 
@@ -610,6 +655,43 @@ class DrivingActivity : AppCompatActivity(),
         handler.post(runnable)
     }
 
+    private fun sendGuideCommand(target: TurnEvent) {
+        if (!readyToWrite) return
+
+        when {
+            target.isComplexArea && target.type == TurnType.LEFT -> {
+                Log.d("LED_COMMAND", "CX_L - 복잡 구간 + 좌회전")
+                BluetoothManager.sendText("CX_L")
+            }
+
+            target.isComplexArea && target.type == TurnType.RIGHT -> {
+                Log.d("LED_COMMAND", "CX_R - 복잡 구간 + 우회전")
+                BluetoothManager.sendText("CX_R")
+            }
+
+            target.type == TurnType.LEFT && target.isContinuous -> {
+                Log.d("LED_COMMAND", "LC - 연속 좌회전")
+                BluetoothManager.sendText("LC")
+            }
+
+            target.type == TurnType.RIGHT && target.isContinuous -> {
+                Log.d("LED_COMMAND", "RC - 연속 우회전")
+                BluetoothManager.sendText("RC")
+            }
+
+            target.type == TurnType.LEFT -> {
+                Log.d("LED_COMMAND", "L - 일반 좌회전")
+                BluetoothManager.sendText("L")
+            }
+
+            target.type == TurnType.RIGHT -> {
+                Log.d("LED_COMMAND", "R - 일반 우회전")
+                BluetoothManager.sendText("R")
+            }
+
+            else -> {}
+        }
+    }
     private fun sendVibration(type: TurnType, isContinuous: Boolean) {
         if (!readyToWrite) return
 

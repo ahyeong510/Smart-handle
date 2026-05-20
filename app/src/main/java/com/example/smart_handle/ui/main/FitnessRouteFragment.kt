@@ -25,6 +25,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import android.util.Log
 
 class FitnessRouteFragment : Fragment() {
 
@@ -93,9 +94,14 @@ class FitnessRouteFragment : Fragment() {
                             if (!isAdded) return
 
                             if (!response.isSuccessful) {
+                                val errorText = response.errorBody()?.string()
+
+                                Log.e("FITNESS_API", "추천 요청 실패 code=${response.code()}")
+                                Log.e("FITNESS_API", "추천 요청 실패 body=$errorText")
+
                                 Toast.makeText(
                                     requireContext(),
-                                    "추천 요청 실패",
+                                    "추천 요청 실패: ${response.code()}",
                                     Toast.LENGTH_SHORT
                                 ).show()
                                 return

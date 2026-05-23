@@ -128,19 +128,38 @@ class DrivingActivity : AppCompatActivity(),
 
         val btnTestTts = findViewById<Button>(R.id.btn_test_tts)
 
-        btnTestTts.visibility = View.VISIBLE //임시 테스트
+        btnTestTts.visibility = View.VISIBLE
+
+        val testCommands = listOf(
+            "L25",
+            "R25",
+            "LC50",
+            "LC25",
+            "RC50",
+            "RC25"
+        )
+        var testCommandIndex = 0
 
         btnTestTts.setOnClickListener {
             if (readyToWrite) {
-                Log.d("BLE_TEST", "Send L")
-                BluetoothManager.sendText("L")
-                Toast.makeText(this, "L 전송", Toast.LENGTH_SHORT).show()
+                val command = testCommands[testCommandIndex]
+
+                Log.d("BLE_TEST", "Send $command")
+                BluetoothManager.sendText(command)
+                Toast.makeText(this, "$command 전송", Toast.LENGTH_SHORT).show()
+
+                testCommandIndex++
+
+                if (testCommandIndex >= testCommands.size) {
+                    testCommandIndex = 0
+                }
             } else {
                 Toast.makeText(this, "BLE 아직 연결 안 됨", Toast.LENGTH_SHORT).show()
                 Log.d("BLE_TEST", "readyToWrite = false")
             }
         }
 
+        //임시 테스트 떄 주석 처리
         if (isTourRoute()) {
             btnTestTts.visibility = View.VISIBLE
 
@@ -618,12 +637,12 @@ class DrivingActivity : AppCompatActivity(),
         }
 
         if (!target.trigger50 && dist < 50 && dist >= 25) {
-            sendGuideCommand(target)
+            sendGuideCommand(target, 50)
             target.trigger50 = true
         }
 
         if (!target.trigger25 && dist < 25 && dist >= 10) {
-            sendGuideCommand(target)
+            sendGuideCommand(target, 25)
             target.trigger25 = true
         }
 
@@ -672,33 +691,39 @@ class DrivingActivity : AppCompatActivity(),
         handler.post(runnable)
     }
 
-    private fun sendGuideCommand(target: TurnEvent) {
-        if (!readyToWrite) return
+    private fun sendGuideCommand(target: TurnEvent, distanceLevel: Int) {
+        if (!readyToWrite) {
+            Log.d("LED_COMMAND", "BLE not ready")
+            return
+        }
 
-        when {
-            target.type == TurnType.LEFT && target.isContinuous -> {
-                Log.d("LED_COMMAND", "LC - 연속 좌회전")
-                BluetoothManager.sendText("LC")
-            }
+        val command = when {
+            // 연속 좌회전: 50m 파란색, 25m 빨간색
+            target.type == TurnType.LEFT && target.isContinuous && distanceLevel == 50 -> "LC50"
+            target.type == TurnType.LEFT && target.isContinuous && distanceLevel == 25 -> "LC25"
 
-            target.type == TurnType.RIGHT && target.isContinuous -> {
-                Log.d("LED_COMMAND", "RC - 연속 우회전")
-                BluetoothManager.sendText("RC")
-            }
+            // 연속 우회전: 50m 파란색, 25m 빨간색
+            target.type == TurnType.RIGHT && target.isContinuous && distanceLevel == 50 -> "RC50"
+            target.type == TurnType.RIGHT && target.isContinuous && distanceLevel == 25 -> "RC25"
 
-            target.type == TurnType.LEFT -> {
-                Log.d("LED_COMMAND", "L - 일반 좌회전")
-                BluetoothManager.sendText("L")
-            }
+            // 일반 좌회전: 25m에서만 빨간색
+            target.type == TurnType.LEFT && !target.isContinuous && distanceLevel == 25 -> "L25"
 
-            target.type == TurnType.RIGHT -> {
-                Log.d("LED_COMMAND", "R - 일반 우회전")
-                BluetoothManager.sendText("R")
-            }
+            // 일반 우회전: 25m에서만 빨간색
+            target.type == TurnType.RIGHT && !target.isContinuous && distanceLevel == 25 -> "R25"
 
-            else -> {}
+            // 일반 회전 50m에서는 아무 명령도 안 보냄
+            else -> null
+        }
+
+        if (command != null) {
+            Log.d("LED_COMMAND", "$command 전송")
+            BluetoothManager.sendText(command)
+        } else {
+            Log.d("LED_COMMAND", "No LED command: type=${target.type}, continuous=${target.isContinuous}, distance=$distanceLevel")
         }
     }
+
     private fun sendVibration(type: TurnType, isContinuous: Boolean) {
         if (!readyToWrite) return
 
@@ -731,7 +756,7 @@ class DrivingActivity : AppCompatActivity(),
         repeatHandler = Handler(Looper.getMainLooper())
         repeatRunnable = object : Runnable {
             override fun run() {
-                sendGuideCommand(target)
+                sendGuideCommand(target,25)
                 repeatHandler?.postDelayed(this, 2000)
             }
         }

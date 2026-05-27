@@ -46,9 +46,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import java.util.Locale
-import kotlin.math.cos
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 class DrivingActivity : AppCompatActivity(),
     BluetoothManager.Listener,
@@ -82,6 +80,7 @@ class DrivingActivity : AppCompatActivity(),
     private var readyToWrite = false
     private var turnEvents: MutableList<TurnEvent> = mutableListOf()
     private var nextTurnIndex = 0
+
     private var isArrivalNotified = false
     private var arrivalSignalSent = false
 
@@ -89,12 +88,9 @@ class DrivingActivity : AppCompatActivity(),
     private var repeatRunnable: Runnable? = null
     private var activeLedCommand: String? = null
     private var activeVibrationCommand: String? = null
-    private var isRepeating = false
 
     private val routePoints = mutableListOf<LatLng>()
     private var routePolyline: Polyline? = null
-    private val routeCumulativeMeters = mutableListOf<Float>()
-    private val turnProgressCache = mutableMapOf<Int, Float>()
 
     private var routeType: String = "navigation"
 
@@ -106,25 +102,20 @@ class DrivingActivity : AppCompatActivity(),
     companion object {
         private const val TOUR_PLACE_TRIGGER_DISTANCE_M = 70f
 
-        // 직진 교차로든 실제 회전 지점이든 15m 안에 들어오면 다음 안내로 넘김
-        private const val EVENT_PASS_DISTANCE_M = 15f
-        private const val EVENT_PASS_PROGRESS_MARGIN_M = 3f
+        // 거리 기반 LED 기준
+        private const val BLUE_LED_START_DISTANCE_M = 100f
+        private const val RED_LED_START_DISTANCE_M = 50f
 
-        // 목적지 20m 안에 들어오면 A 전송
+        // 15m 이내로 들어오면 해당 턴은 끝난 것으로 보고 다음 턴 안내
+        private const val TURN_PASS_DISTANCE_M = 15f
+
+        // 도착 20m 이내에서 A 전송
         private const val ARRIVAL_SIGNAL_DISTANCE_M = 20f
 
-        // 진동은 실제 회전 지점 기준 50m 안에서만 반복
+        // 진동은 실제 회전 50m 전부터 반복
         private const val VIBRATION_START_DISTANCE_M = 50f
         private const val VIBRATION_REPEAT_INTERVAL_MS = 700L
-
-        // GPS가 경로에서 이 정도 이상 벗어나면 진행도 기반 통과 판정은 보류
-        private const val ROUTE_MATCH_THRESHOLD_M = 25f
     }
-
-    private data class RouteProgress(
-        val progressMeters: Float,
-        val distanceToRouteMeters: Float
-    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -152,12 +143,17 @@ class DrivingActivity : AppCompatActivity(),
         }
 
         val btnTestTts = findViewById<Button>(R.id.btn_test_tts)
+
         if (isTourRoute()) {
             btnTestTts.visibility = View.VISIBLE
+
             btnTestTts.setOnClickListener {
                 if (tourPlaces.isNotEmpty()) {
                     val place = tourPlaces[0]
                     val message = buildTourPlaceMessage(place)
+
+                    Log.d("TOUR_TTS_MESSAGE", message)
+
                     speakTourMessage(message)
 
                     Toast.makeText(
@@ -166,7 +162,11 @@ class DrivingActivity : AppCompatActivity(),
                         Toast.LENGTH_SHORT
                     ).show()
                 } else {
-                    Toast.makeText(this, "관광지 정보 없음", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this,
+                        "관광지 정보 없음",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         } else {
@@ -182,16 +182,10 @@ class DrivingActivity : AppCompatActivity(),
 
         intent.getParcelableArrayListExtra<LatLng>("route_points")?.let {
             routePoints.addAll(it)
-            buildRouteCumulativeMeters()
         }
 
-        Log.d("NAV_INTERSECTION", "받은 이벤트 수=${turnEvents.size}, 폴리라인 수=${routePoints.size}")
-        turnEvents.forEachIndexed { index, event ->
-            Log.d(
-                "NAV_INTERSECTION",
-                "event[$index] type=${event.type}, lat=${event.location.latitude}, lng=${event.location.longitude}"
-            )
-        }
+        Log.d("NAV_DISTANCE", "받은 회전 이벤트 수=${turnEvents.size}")
+        Log.d("NAV_DISTANCE", "받은 폴리라인 포인트 수=${routePoints.size}")
 
         loadTourPlacesFromIntent()
 
@@ -289,9 +283,11 @@ class DrivingActivity : AppCompatActivity(),
             safeFinish()
             return
         }
+
         firestoreSaved = true
 
         val user = FirebaseAuth.getInstance().currentUser
+
         if (user == null) {
             Toast.makeText(
                 this,
@@ -348,6 +344,7 @@ class DrivingActivity : AppCompatActivity(),
 
     private fun showSatisfactionDialog() {
         if (surveyShown || isFinishing || isDestroyed) return
+
         surveyShown = true
 
         val options = arrayOf("만족", "보통", "불만족")
@@ -378,9 +375,10 @@ class DrivingActivity : AppCompatActivity(),
 
     private fun handleRideFinishedByUser() {
         if (rideFinished) return
+
         rideFinished = true
 
-        stopAllSignals(forceSendStop = true, reason = "user stop")
+        stopAllSignals("user stop", forceSendStop = true)
         stopLocationTracking()
         saveRideToRoom(true)
 
@@ -393,11 +391,11 @@ class DrivingActivity : AppCompatActivity(),
 
     private fun handleRideFinishedByArrival() {
         if (rideFinished) return
+
         rideFinished = true
         isArrivalNotified = true
 
-        // 기존 빨강/파랑/진동을 먼저 끄고, 바로 A를 보내야 초록 LED가 살아남음
-        stopAllSignals(forceSendStop = true, reason = "arrival before A")
+        stopAllSignals("arrival before A", forceSendStop = true)
         sendArrivalCommand()
 
         stopLocationTracking()
@@ -414,7 +412,9 @@ class DrivingActivity : AppCompatActivity(),
 
     private fun safeFinish() {
         if (isClosing) return
+
         isClosing = true
+
         try {
             finish()
         } catch (e: Exception) {
@@ -477,6 +477,7 @@ class DrivingActivity : AppCompatActivity(),
             if (lastLocation != null) {
                 totalDistanceMeters += lastLocation!!.distanceTo(loc)
             }
+
             lastLocation = loc
 
             val here = LatLng(loc.latitude, loc.longitude)
@@ -499,11 +500,12 @@ class DrivingActivity : AppCompatActivity(),
         if (!isTtsReady || tourPlaces.isEmpty()) return
 
         for (place in tourPlaces) {
-            val uniqueKey = if (place.contentId.isNotBlank()) {
-                place.contentId
-            } else {
-                place.name
-            }
+            val uniqueKey =
+                if (place.contentId.isNotBlank()) {
+                    place.contentId
+                } else {
+                    place.name
+                }
 
             if (spokenTourPlaceNames.contains(uniqueKey)) continue
 
@@ -525,17 +527,19 @@ class DrivingActivity : AppCompatActivity(),
                     "TOUR_TTS",
                     "관광지 도착 안내: ${place.tourTitle.ifBlank { place.name }}, 거리=${dist.roundToInt()}m"
                 )
+
                 break
             }
         }
     }
 
     private fun buildTourPlaceMessage(place: TourPlaceData): String {
-        val displayName = when {
-            place.name.isNotBlank() -> place.name
-            place.tourTitle.isNotBlank() -> place.tourTitle
-            else -> "관광지"
-        }
+        val displayName =
+            when {
+                place.name.isNotBlank() -> place.name
+                place.tourTitle.isNotBlank() -> place.tourTitle
+                else -> "관광지"
+            }
 
         val tourTitle = place.tourTitle.trim()
         val description = place.description?.trim().orEmpty()
@@ -574,17 +578,18 @@ class DrivingActivity : AppCompatActivity(),
             return
         }
 
-        val routeProgress = calculateRouteProgress(current)
-        advancePassedEvents(current, routeProgress)
+        advancePassedTurnEvents(current)
 
         val targetTurnIndex = findNextDirectionalTurnIndex(nextTurnIndex)
 
         if (targetTurnIndex == null) {
-            setLedCommand(null, "no next directional turn")
+            setLedCommand(null, "no next turn")
             setVibrationCommand(null)
+
             if (!isArrivalNotified) {
                 turnCard.visibility = View.GONE
             }
+
             return
         }
 
@@ -592,39 +597,10 @@ class DrivingActivity : AppCompatActivity(),
         val distToTarget = distance(current, target.location)
         val displayDist = distToTarget.roundToInt()
 
-        // 핵심: STRAIGHT 이벤트도 교차로 1개로 계산함.
-        // 예: STRAIGHT, STRAIGHT, RIGHT이면 count=3 -> LED 꺼짐
-        // 첫 STRAIGHT 지나면 count=2 -> 파랑
-        // 두 번째 STRAIGHT 지나면 count=1 -> 빨강
-        val intersectionCount = targetTurnIndex - nextTurnIndex + 1
+        updateTurnCard(target, displayDist)
 
-        turnCard.visibility = View.VISIBLE
-        turnDistance.text = "${displayDist}m 후"
-
-        val directionText = when (target.type) {
-            TurnType.LEFT -> {
-                turnIcon.setImageResource(R.drawable.ic_turn_left)
-                "좌회전"
-            }
-
-            TurnType.RIGHT -> {
-                turnIcon.setImageResource(R.drawable.ic_turn_right)
-                "우회전"
-            }
-
-            TurnType.STRAIGHT -> {
-                "직진"
-            }
-        }
-
-        turnTypeText.text = when {
-            intersectionCount <= 1 -> "다음 교차로 $directionText"
-            intersectionCount == 2 -> "두 번째 교차로 $directionText"
-            else -> "${intersectionCount}번째 교차로 $directionText"
-        }
-
-        val ledCommand = getLedCommand(target.type, intersectionCount)
-        setLedCommand(ledCommand, "intersectionCount=$intersectionCount")
+        val ledCommand = getDistanceBasedLedCommand(target.type, distToTarget)
+        setLedCommand(ledCommand, "dist=${displayDist}m")
 
         val vibrationCommand =
             if (distToTarget <= VIBRATION_START_DISTANCE_M) {
@@ -636,45 +612,95 @@ class DrivingActivity : AppCompatActivity(),
         setVibrationCommand(vibrationCommand)
 
         Log.d(
-            "NAV_INTERSECTION",
+            "NAV_DISTANCE",
             "nextIndex=$nextTurnIndex, targetIndex=$targetTurnIndex, " +
-                    "count=$intersectionCount, dist=${displayDist}m, type=${target.type}, " +
+                    "dist=${displayDist}m, type=${target.type}, " +
                     "led=$ledCommand, vibration=$vibrationCommand, ready=$readyToWrite"
         )
     }
 
-    private fun advancePassedEvents(current: LatLng, routeProgress: RouteProgress?) {
+    private fun advancePassedTurnEvents(current: LatLng) {
         while (nextTurnIndex < turnEvents.size) {
             val event = turnEvents[nextTurnIndex]
             val dist = distance(current, event.location)
 
-            val shouldAdvance =
-                dist <= EVENT_PASS_DISTANCE_M || hasPassedEventByRouteProgress(routeProgress, nextTurnIndex)
-
-            if (!shouldAdvance) break
+            if (dist > TURN_PASS_DISTANCE_M) {
+                break
+            }
 
             Log.d(
-                "NAV_INTERSECTION",
-                "이벤트 통과 처리: idx=$nextTurnIndex, type=${event.type}, dist=${dist.roundToInt()}m"
+                "NAV_DISTANCE",
+                "턴/이벤트 15m 이내 진입 → 다음 안내로 이동: idx=$nextTurnIndex, type=${event.type}, dist=${dist.roundToInt()}m"
             )
 
-            stopAllSignals(forceSendStop = true, reason = "event passed")
+            stopAllSignals("turn passed within 15m", forceSendStop = true)
             nextTurnIndex++
         }
     }
 
-    private fun hasPassedEventByRouteProgress(
-        routeProgress: RouteProgress?,
-        eventIndex: Int
-    ): Boolean {
-        val progress = routeProgress ?: return false
+    private fun updateTurnCard(
+        target: TurnEvent,
+        displayDistance: Int
+    ) {
+        turnCard.visibility = View.VISIBLE
+        turnDistance.text = "${displayDistance}m 후"
 
-        if (progress.distanceToRouteMeters > ROUTE_MATCH_THRESHOLD_M) {
-            return false
+        when (target.type) {
+            TurnType.LEFT -> {
+                turnIcon.setImageResource(R.drawable.ic_turn_left)
+                turnTypeText.text = "좌회전"
+            }
+
+            TurnType.RIGHT -> {
+                turnIcon.setImageResource(R.drawable.ic_turn_right)
+                turnTypeText.text = "우회전"
+            }
+
+            TurnType.STRAIGHT -> {
+                turnTypeText.text = "직진"
+            }
         }
+    }
 
-        val eventProgress = getTurnProgress(eventIndex) ?: return false
-        return progress.progressMeters > eventProgress + EVENT_PASS_PROGRESS_MARGIN_M
+    private fun getDistanceBasedLedCommand(
+        type: TurnType,
+        distanceToTurn: Float
+    ): String? {
+        if (type == TurnType.STRAIGHT) return null
+
+        return when {
+            distanceToTurn <= TURN_PASS_DISTANCE_M -> {
+                null
+            }
+
+            distanceToTurn <= RED_LED_START_DISTANCE_M -> {
+                when (type) {
+                    TurnType.LEFT -> "L25"
+                    TurnType.RIGHT -> "R25"
+                    TurnType.STRAIGHT -> null
+                }
+            }
+
+            distanceToTurn <= BLUE_LED_START_DISTANCE_M -> {
+                when (type) {
+                    TurnType.LEFT -> "LC50"
+                    TurnType.RIGHT -> "RC50"
+                    TurnType.STRAIGHT -> null
+                }
+            }
+
+            else -> {
+                null
+            }
+        }
+    }
+
+    private fun getVibrationCommand(type: TurnType): String? {
+        return when (type) {
+            TurnType.LEFT -> "L"
+            TurnType.RIGHT -> "R"
+            TurnType.STRAIGHT -> null
+        }
     }
 
     private fun findNextDirectionalTurnIndex(startIndex: Int): Int? {
@@ -689,32 +715,13 @@ class DrivingActivity : AppCompatActivity(),
         return null
     }
 
-    private fun getLedCommand(type: TurnType, intersectionCount: Int): String? {
-        return when {
-            intersectionCount <= 1 && type == TurnType.LEFT -> "L25"
-            intersectionCount <= 1 && type == TurnType.RIGHT -> "R25"
-
-            intersectionCount == 2 && type == TurnType.LEFT -> "LC50"
-            intersectionCount == 2 && type == TurnType.RIGHT -> "RC50"
-
-            else -> null
-        }
-    }
-
-    private fun getVibrationCommand(type: TurnType): String? {
-        return when (type) {
-            TurnType.LEFT -> "L"
-            TurnType.RIGHT -> "R"
-            TurnType.STRAIGHT -> null
-        }
-    }
-
     private fun checkArrival(current: LatLng) {
         if (isArrivalNotified) return
 
-        val destination = routePoints.lastOrNull()
-            ?: turnEvents.lastOrNull()?.location
-            ?: return
+        val destination =
+            routePoints.lastOrNull()
+                ?: turnEvents.lastOrNull()?.location
+                ?: return
 
         val distToDest = distance(current, destination)
 
@@ -723,89 +730,6 @@ class DrivingActivity : AppCompatActivity(),
         if (distToDest <= ARRIVAL_SIGNAL_DISTANCE_M) {
             handleRideFinishedByArrival()
         }
-    }
-
-    private fun buildRouteCumulativeMeters() {
-        routeCumulativeMeters.clear()
-        turnProgressCache.clear()
-
-        if (routePoints.isEmpty()) return
-
-        var total = 0f
-        routeCumulativeMeters.add(total)
-
-        for (i in 0 until routePoints.lastIndex) {
-            total += distance(routePoints[i], routePoints[i + 1])
-            routeCumulativeMeters.add(total)
-        }
-
-        Log.d("NAV_ROUTE", "폴리라인 포인트=${routePoints.size}, 총 길이=${total.roundToInt()}m")
-    }
-
-    private fun getTurnProgress(index: Int): Float? {
-        if (index !in turnEvents.indices) return null
-        if (routePoints.size < 2 || routeCumulativeMeters.size != routePoints.size) return null
-
-        val cached = turnProgressCache[index]
-
-        if (cached != null) {
-            return if (cached >= 0f) cached else null
-        }
-
-        val progress = calculateRouteProgress(turnEvents[index].location)
-        val value = progress?.progressMeters ?: -1f
-        turnProgressCache[index] = value
-
-        return progress?.progressMeters
-    }
-
-    private fun calculateRouteProgress(point: LatLng): RouteProgress? {
-        if (routePoints.size < 2 || routeCumulativeMeters.size != routePoints.size) {
-            return null
-        }
-
-        var bestDistanceSq = Double.MAX_VALUE
-        var bestProgressMeters = 0.0
-
-        for (i in 0 until routePoints.lastIndex) {
-            val a = routePoints[i]
-            val b = routePoints[i + 1]
-
-            val latRad = Math.toRadians((a.latitude + b.latitude + point.latitude) / 3.0)
-            val metersPerDegreeLng = 111320.0 * cos(latRad)
-            val metersPerDegreeLat = 110540.0
-
-            val bx = (b.longitude - a.longitude) * metersPerDegreeLng
-            val by = (b.latitude - a.latitude) * metersPerDegreeLat
-            val px = (point.longitude - a.longitude) * metersPerDegreeLng
-            val py = (point.latitude - a.latitude) * metersPerDegreeLat
-
-            val segmentLengthSq = bx * bx + by * by
-
-            val t =
-                if (segmentLengthSq > 0.0) {
-                    ((px * bx + py * by) / segmentLengthSq).coerceIn(0.0, 1.0)
-                } else {
-                    0.0
-                }
-
-            val projectedX = bx * t
-            val projectedY = by * t
-
-            val dx = px - projectedX
-            val dy = py - projectedY
-            val distanceSq = dx * dx + dy * dy
-
-            if (distanceSq < bestDistanceSq) {
-                bestDistanceSq = distanceSq
-                bestProgressMeters = routeCumulativeMeters[i] + sqrt(segmentLengthSq) * t
-            }
-        }
-
-        return RouteProgress(
-            progressMeters = bestProgressMeters.toFloat(),
-            distanceToRouteMeters = sqrt(bestDistanceSq).toFloat()
-        )
     }
 
     private fun setLedCommand(command: String?, reason: String) {
@@ -835,7 +759,6 @@ class DrivingActivity : AppCompatActivity(),
         if (command == null) return
 
         activeVibrationCommand = command
-        isRepeating = true
 
         repeatHandler = Handler(Looper.getMainLooper())
         repeatRunnable = object : Runnable {
@@ -851,15 +774,23 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     private fun stopVibrationLoop() {
-        repeatRunnable?.let { repeatHandler?.removeCallbacks(it) }
+        repeatRunnable?.let {
+            repeatHandler?.removeCallbacks(it)
+        }
+
         repeatRunnable = null
         repeatHandler = null
         activeVibrationCommand = null
-        isRepeating = false
     }
 
-    private fun stopAllSignals(forceSendStop: Boolean, reason: String) {
-        val hadSignal = activeLedCommand != null || activeVibrationCommand != null || repeatRunnable != null
+    private fun stopAllSignals(
+        reason: String,
+        forceSendStop: Boolean
+    ) {
+        val hadSignal =
+            activeLedCommand != null ||
+                    activeVibrationCommand != null ||
+                    repeatRunnable != null
 
         stopVibrationLoop()
         activeLedCommand = null
@@ -869,7 +800,10 @@ class DrivingActivity : AppCompatActivity(),
         }
     }
 
-    private fun sendCommandOnce(command: String, reason: String): Boolean {
+    private fun sendCommandOnce(
+        command: String,
+        reason: String
+    ): Boolean {
         val ok = BluetoothManager.sendText(command)
 
         if (ok) {
@@ -893,6 +827,7 @@ class DrivingActivity : AppCompatActivity(),
 
     private fun sendArrivalCommand() {
         if (arrivalSignalSent) return
+
         arrivalSignalSent = true
 
         val ok = BluetoothManager.sendText("A")
@@ -904,8 +839,12 @@ class DrivingActivity : AppCompatActivity(),
         }
     }
 
-    private fun distance(a: LatLng, b: LatLng): Float {
+    private fun distance(
+        a: LatLng,
+        b: LatLng
+    ): Float {
         val arr = FloatArray(1)
+
         Location.distanceBetween(
             a.latitude,
             a.longitude,
@@ -913,6 +852,7 @@ class DrivingActivity : AppCompatActivity(),
             b.longitude,
             arr
         )
+
         return arr[0]
     }
 
@@ -927,7 +867,7 @@ class DrivingActivity : AppCompatActivity(),
         if (arrivalSignalSent) {
             stopVibrationLoop()
         } else {
-            stopAllSignals(forceSendStop = true, reason = "destroy")
+            stopAllSignals("destroy", forceSendStop = true)
         }
 
         stopLocationTracking()
@@ -946,7 +886,8 @@ class DrivingActivity : AppCompatActivity(),
     override fun onMapReady(map: GoogleMap) {
         googleMap = map
 
-        if (ContextCompat.checkSelfPermission(
+        if (
+            ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
@@ -955,10 +896,11 @@ class DrivingActivity : AppCompatActivity(),
         }
 
         if (routePoints.isNotEmpty()) {
-            val polylineOptions = PolylineOptions()
-                .addAll(routePoints)
-                .width(10f)
-                .color(0xFF2196F3.toInt())
+            val polylineOptions =
+                PolylineOptions()
+                    .addAll(routePoints)
+                    .width(10f)
+                    .color(0xFF2196F3.toInt())
 
             routePolyline = googleMap?.addPolyline(polylineOptions)
 

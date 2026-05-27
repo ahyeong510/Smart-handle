@@ -46,7 +46,10 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 class DrivingActivity : AppCompatActivity(),
     BluetoothManager.Listener,
@@ -89,6 +92,10 @@ class DrivingActivity : AppCompatActivity(),
     private val routePoints = mutableListOf<LatLng>()
     private var routePolyline: Polyline? = null
 
+    private val routeCumulativeMeters = mutableListOf<Float>()
+    private val turnProgressCache = mutableMapOf<Int, Float>()
+    private var initialTurnSkipDone = false
+
     private var routeType: String = "navigation"
 
     // 관광모드 TTS 관련
@@ -99,7 +106,22 @@ class DrivingActivity : AppCompatActivity(),
 
     companion object {
         private const val TOUR_PLACE_TRIGGER_DISTANCE_M = 70f
+
+        // GPS 오차 때문에 "정확히 3m 안에 들어와야 다음 회전" 방식은 실제 길에서 자주 멈춤.
+        // 그래서 경로 폴리라인 기준 15m 안이면 경로 위에 있다고 보고, 지나간 회전은 넘긴다.
+        private const val ROUTE_MATCH_THRESHOLD_M = 15f
+        private const val INITIAL_TURN_SKIP_DISTANCE_M = 15f
+        private const val TURN_PASS_DISTANCE_M = 8f
+        private const val TURN_PASS_PROGRESS_MARGIN_M = 5f
+
+        // 가까운 회전이 연속으로 있을 때 LC/RC 명령을 쓰기 위한 기준값.
+        private const val CONTINUOUS_TURN_GAP_M = 80f
     }
+
+    private data class RouteProgress(
+        val progressMeters: Float,
+        val distanceToRouteMeters: Float
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -128,38 +150,6 @@ class DrivingActivity : AppCompatActivity(),
 
         val btnTestTts = findViewById<Button>(R.id.btn_test_tts)
 
-        btnTestTts.visibility = View.VISIBLE
-
-        val testCommands = listOf(
-            "L25",
-            "R25",
-            "LC50",
-            "LC25",
-            "RC50",
-            "RC25"
-        )
-        var testCommandIndex = 0
-
-        btnTestTts.setOnClickListener {
-            if (readyToWrite) {
-                val command = testCommands[testCommandIndex]
-
-                Log.d("BLE_TEST", "Send $command")
-                BluetoothManager.sendText(command)
-                Toast.makeText(this, "$command 전송", Toast.LENGTH_SHORT).show()
-
-                testCommandIndex++
-
-                if (testCommandIndex >= testCommands.size) {
-                    testCommandIndex = 0
-                }
-            } else {
-                Toast.makeText(this, "BLE 아직 연결 안 됨", Toast.LENGTH_SHORT).show()
-                Log.d("BLE_TEST", "readyToWrite = false")
-            }
-        }
-
-        //임시 테스트 떄 주석 처리
         if (isTourRoute()) {
             btnTestTts.visibility = View.VISIBLE
 
@@ -194,19 +184,21 @@ class DrivingActivity : AppCompatActivity(),
             btnTestTts.visibility = View.GONE
         }
 
-
-
         BluetoothManager.attachListener(this)
         fused = LocationServices.getFusedLocationProviderClient(this)
 
         intent.getParcelableArrayListExtra<TurnEvent>("turn_events")?.let {
             turnEvents.addAll(it)
-            analyzeTurnEventsForLed()
         }
+
+        Log.d("NAV_TURN", "받은 회전 이벤트 수=${turnEvents.size}")
 
         intent.getParcelableArrayListExtra<LatLng>("route_points")?.let {
             routePoints.addAll(it)
+            buildRouteCumulativeMeters()
         }
+
+        Log.d("NAV_ROUTE", "받은 폴리라인 포인트 수=${routePoints.size}")
 
         loadTourPlacesFromIntent()
 
@@ -459,8 +451,15 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     private val permLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            startLocationTracking()
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            val fineGranted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true
+
+            if (fineGranted) {
+                startLocationTracking()
+            } else {
+                Toast.makeText(this, "위치 권한이 필요합니다", Toast.LENGTH_SHORT).show()
+                Log.w("LOCATION", "ACCESS_FINE_LOCATION 권한 거부됨")
+            }
         }
 
     @SuppressLint("MissingPermission")
@@ -572,39 +571,18 @@ class DrivingActivity : AppCompatActivity(),
         )
     }
 
-    private fun analyzeTurnEventsForLed() {
-        markContinuousTurns()
-    }
-
-    private fun markContinuousTurns() {
-        if (turnEvents.size < 2) return
-
-        for (i in 0 until turnEvents.size - 1) {
-            val current = turnEvents[i]
-            val next = turnEvents[i + 1]
-
-            val sameDirection =
-                (current.type == TurnType.LEFT && next.type == TurnType.LEFT) ||
-                        (current.type == TurnType.RIGHT && next.type == TurnType.RIGHT)
-
-            val closeDistance = distance(current.location, next.location) <= 50f
-
-            if (sameDirection && closeDistance) {
-                current.isContinuous = true
-                next.isContinuous = true
-
-
-                Log.d(
-                    "LED_ANALYZE",
-                    "연속 회전 감지: ${current.type}, distance=${distance(current.location, next.location)}"
-                )
-            }
-        }
-    }
-
-
     private fun checkTurnEvent(current: LatLng) {
         if (rideFinished) return
+
+        if (turnEvents.isEmpty()) {
+            turnCard.visibility = View.GONE
+            return
+        }
+
+        val routeProgress = calculateRouteProgress(current)
+
+        // 시작하자마자 첫 회전점이 너무 가까우면 GPS 오차 때문에 첫 회전에 묶이는 문제가 생겨서 넘김.
+        skipInitialTooCloseTurns(current, routeProgress)
 
         if (nextTurnIndex >= turnEvents.size) {
             if (!isArrivalNotified) {
@@ -616,6 +594,7 @@ class DrivingActivity : AppCompatActivity(),
         val target = turnEvents[nextTurnIndex]
         val dist = distance(current, target.location)
         val displayDist = dist.roundToInt()
+        val continuous = isContinuousTurn(nextTurnIndex)
 
         turnCard.visibility = View.VISIBLE
         turnDistance.text = "${displayDist}m 후"
@@ -623,12 +602,14 @@ class DrivingActivity : AppCompatActivity(),
         when (target.type) {
             TurnType.LEFT -> {
                 turnIcon.setImageResource(R.drawable.ic_turn_left)
-                turnTypeText.text = "좌회전"
+                turnTypeText.text =
+                    if (continuous) "연속 좌회전" else "좌회전"
             }
 
             TurnType.RIGHT -> {
                 turnIcon.setImageResource(R.drawable.ic_turn_right)
-                turnTypeText.text = "우회전"
+                turnTypeText.text =
+                    if (continuous) "연속 우회전" else "우회전"
             }
 
             TurnType.STRAIGHT -> {
@@ -636,27 +617,214 @@ class DrivingActivity : AppCompatActivity(),
             }
         }
 
-        if (!target.trigger50 && dist < 50 && dist >= 25) {
-            sendGuideCommand(target, 50)
+        Log.d(
+            "NAV_TURN",
+            "idx=$nextTurnIndex/${turnEvents.size}, dist=${displayDist}m, " +
+                    "type=${target.type}, continuous=$continuous, ready=$readyToWrite"
+        )
+
+        // 연속 회전일 때만 50m에서 파랑 LED 명령.
+        if (continuous && !target.trigger50 && dist <= 50f && dist > 25f) {
+            sendNavigationCommand(target.type, true, 50)
             target.trigger50 = true
         }
 
-        if (!target.trigger25 && dist < 25 && dist >= 10) {
-            sendGuideCommand(target, 25)
+        // 일반 회전은 25m에서 L25/R25, 연속 회전은 25m에서 LC25/RC25.
+        if (!target.trigger25 && dist <= 25f) {
+            sendNavigationCommand(target.type, continuous, 25)
             target.trigger25 = true
+            target.trigger50 = true
         }
 
-        if (dist < 10 && dist >= 3) {
+        // 아주 가까워지면 25m 명령을 반복해서 한 번 더 확실히 알려줌.
+        if (dist <= 10f && dist > TURN_PASS_DISTANCE_M) {
             if (!isRepeating) {
-                startRepeating(target)
+                startRepeating(target.type, continuous)
                 isRepeating = true
             }
         }
 
-        if (dist < 3) {
+        // GPS가 정확히 3m 안에 들어오지 않아도, 경로 진행상 지나갔다고 판단되면 다음 회전으로 넘김.
+        if (shouldMoveToNextTurn(routeProgress, nextTurnIndex, dist)) {
             stopRepeating()
+            Log.d("NAV_TURN", "다음 회전으로 이동: idx=$nextTurnIndex -> ${nextTurnIndex + 1}")
             nextTurnIndex++
         }
+    }
+
+    private fun skipInitialTooCloseTurns(current: LatLng, routeProgress: RouteProgress?) {
+        if (initialTurnSkipDone) return
+
+        // 첫 GPS가 튀어서 경로 밖으로 잡히면 여기서 스킵 판정을 하지 않고,
+        // 사용자가 폴리라인 15m 안으로 들어온 뒤 첫 회전 스킵을 한 번만 실행한다.
+        if (routeProgress != null && routeProgress.distanceToRouteMeters > ROUTE_MATCH_THRESHOLD_M) {
+            Log.d(
+                "NAV_SKIP",
+                "초기 위치가 경로에서 ${routeProgress.distanceToRouteMeters.roundToInt()}m 떨어져 있어 첫 회전 스킵 대기"
+            )
+            return
+        }
+
+        initialTurnSkipDone = true
+
+        while (nextTurnIndex < turnEvents.size) {
+            val target = turnEvents[nextTurnIndex]
+            val dist = distance(current, target.location)
+
+            val passedByRouteProgress = shouldMoveToNextTurn(
+                routeProgress = routeProgress,
+                index = nextTurnIndex,
+                directDistance = dist
+            )
+
+            if (dist < INITIAL_TURN_SKIP_DISTANCE_M || passedByRouteProgress) {
+                Log.d(
+                    "NAV_SKIP",
+                    "시작 지점에서 너무 가까운 회전 스킵: idx=$nextTurnIndex, dist=${dist.roundToInt()}m"
+                )
+                nextTurnIndex++
+            } else {
+                break
+            }
+        }
+    }
+
+    private fun shouldMoveToNextTurn(
+        routeProgress: RouteProgress?,
+        index: Int,
+        directDistance: Float
+    ): Boolean {
+        if (directDistance <= TURN_PASS_DISTANCE_M) {
+            return true
+        }
+
+        val progress = routeProgress ?: return false
+
+        if (progress.distanceToRouteMeters > ROUTE_MATCH_THRESHOLD_M) {
+            Log.d(
+                "NAV_ROUTE",
+                "경로에서 ${progress.distanceToRouteMeters.roundToInt()}m 떨어짐: 진행도 기반 스킵 보류"
+            )
+            return false
+        }
+
+        val turnProgress = getTurnProgress(index) ?: return false
+
+        return progress.progressMeters > turnProgress + TURN_PASS_PROGRESS_MARGIN_M
+    }
+
+    private fun isContinuousTurn(index: Int): Boolean {
+        val event = turnEvents.getOrNull(index) ?: return false
+
+        if (event.type == TurnType.STRAIGHT) return false
+        if (event.isContinuous) return true
+
+        return isCloseTurnPair(index, index - 1) || isCloseTurnPair(index, index + 1)
+    }
+
+    private fun isCloseTurnPair(index: Int, otherIndex: Int): Boolean {
+        val event = turnEvents.getOrNull(index) ?: return false
+        val other = turnEvents.getOrNull(otherIndex) ?: return false
+
+        if (event.type == TurnType.STRAIGHT || other.type == TurnType.STRAIGHT) {
+            return false
+        }
+
+        val eventProgress = getTurnProgress(index)
+        val otherProgress = getTurnProgress(otherIndex)
+
+        val gapMeters =
+            if (eventProgress != null && otherProgress != null) {
+                abs(otherProgress - eventProgress)
+            } else {
+                distance(event.location, other.location)
+            }
+
+        return gapMeters <= CONTINUOUS_TURN_GAP_M
+    }
+
+    private fun buildRouteCumulativeMeters() {
+        routeCumulativeMeters.clear()
+        turnProgressCache.clear()
+
+        if (routePoints.isEmpty()) return
+
+        var total = 0f
+        routeCumulativeMeters.add(total)
+
+        for (i in 0 until routePoints.lastIndex) {
+            total += distance(routePoints[i], routePoints[i + 1])
+            routeCumulativeMeters.add(total)
+        }
+
+        Log.d(
+            "NAV_ROUTE",
+            "폴리라인 포인트=${routePoints.size}, 총 길이=${total.roundToInt()}m"
+        )
+    }
+
+    private fun getTurnProgress(index: Int): Float? {
+        if (index !in turnEvents.indices) return null
+        if (routePoints.size < 2 || routeCumulativeMeters.size != routePoints.size) return null
+
+        val cached = turnProgressCache[index]
+        if (cached != null) {
+            return if (cached >= 0f) cached else null
+        }
+
+        val progress = calculateRouteProgress(turnEvents[index].location)
+        val value = progress?.progressMeters ?: -1f
+        turnProgressCache[index] = value
+
+        return progress?.progressMeters
+    }
+
+    private fun calculateRouteProgress(point: LatLng): RouteProgress? {
+        if (routePoints.size < 2 || routeCumulativeMeters.size != routePoints.size) {
+            return null
+        }
+
+        var bestDistanceSq = Double.MAX_VALUE
+        var bestProgressMeters = 0.0
+
+        for (i in 0 until routePoints.lastIndex) {
+            val a = routePoints[i]
+            val b = routePoints[i + 1]
+
+            val latRad = Math.toRadians((a.latitude + b.latitude + point.latitude) / 3.0)
+            val metersPerDegreeLng = 111320.0 * cos(latRad)
+            val metersPerDegreeLat = 110540.0
+
+            val bx = (b.longitude - a.longitude) * metersPerDegreeLng
+            val by = (b.latitude - a.latitude) * metersPerDegreeLat
+            val px = (point.longitude - a.longitude) * metersPerDegreeLng
+            val py = (point.latitude - a.latitude) * metersPerDegreeLat
+
+            val segmentLengthSq = bx * bx + by * by
+            val t =
+                if (segmentLengthSq > 0.0) {
+                    ((px * bx + py * by) / segmentLengthSq).coerceIn(0.0, 1.0)
+                } else {
+                    0.0
+                }
+
+            val projectedX = bx * t
+            val projectedY = by * t
+
+            val dx = px - projectedX
+            val dy = py - projectedY
+            val distanceSq = dx * dx + dy * dy
+
+            if (distanceSq < bestDistanceSq) {
+                bestDistanceSq = distanceSq
+                bestProgressMeters = routeCumulativeMeters[i] + sqrt(segmentLengthSq) * t
+            }
+        }
+
+        return RouteProgress(
+            progressMeters = bestProgressMeters.toFloat(),
+            distanceToRouteMeters = sqrt(bestDistanceSq).toFloat()
+        )
     }
 
     private fun checkArrival(current: LatLng) {
@@ -671,8 +839,6 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     private fun startArrivalVibration() {
-        if (!readyToWrite) return
-
         val handler = Handler(Looper.getMainLooper())
         var count = 0
 
@@ -680,8 +846,8 @@ class DrivingActivity : AppCompatActivity(),
             override fun run() {
                 if (count >= 3) return
 
-                BluetoothManager.sendText("L")
-                BluetoothManager.sendText("R")
+                BluetoothManager.sendText("L25")
+                BluetoothManager.sendText("R25")
 
                 count++
                 handler.postDelayed(this, 300)
@@ -691,72 +857,54 @@ class DrivingActivity : AppCompatActivity(),
         handler.post(runnable)
     }
 
-    private fun sendGuideCommand(target: TurnEvent, distanceLevel: Int) {
-        if (!readyToWrite) {
-            Log.d("LED_COMMAND", "BLE not ready")
-            return
-        }
-
-        val command = when {
-            // 연속 좌회전: 50m 파란색, 25m 빨간색
-            target.type == TurnType.LEFT && target.isContinuous && distanceLevel == 50 -> "LC50"
-            target.type == TurnType.LEFT && target.isContinuous && distanceLevel == 25 -> "LC25"
-
-            // 연속 우회전: 50m 파란색, 25m 빨간색
-            target.type == TurnType.RIGHT && target.isContinuous && distanceLevel == 50 -> "RC50"
-            target.type == TurnType.RIGHT && target.isContinuous && distanceLevel == 25 -> "RC25"
-
-            // 일반 좌회전: 25m에서만 빨간색
-            target.type == TurnType.LEFT && !target.isContinuous && distanceLevel == 25 -> "L25"
-
-            // 일반 우회전: 25m에서만 빨간색
-            target.type == TurnType.RIGHT && !target.isContinuous && distanceLevel == 25 -> "R25"
-
-            // 일반 회전 50m에서는 아무 명령도 안 보냄
-            else -> null
-        }
-
-        if (command != null) {
-            Log.d("LED_COMMAND", "$command 전송")
-            BluetoothManager.sendText(command)
-        } else {
-            Log.d("LED_COMMAND", "No LED command: type=${target.type}, continuous=${target.isContinuous}, distance=$distanceLevel")
-        }
-    }
-
-    private fun sendVibration(type: TurnType, isContinuous: Boolean) {
-        if (!readyToWrite) return
-
-        when (type) {
+    private fun sendNavigationCommand(type: TurnType, isContinuous: Boolean, distanceMeter: Int) {
+        val command = when (type) {
             TurnType.LEFT -> {
                 if (isContinuous) {
-                    Log.d("VIBRATION", "LC")
-                    BluetoothManager.sendText("LC")
+                    if (distanceMeter >= 50) "LC50" else "LC25"
                 } else {
-                    Log.d("VIBRATION", "L")
-                    BluetoothManager.sendText("L")
+                    "L25"
                 }
             }
 
             TurnType.RIGHT -> {
                 if (isContinuous) {
-                    Log.d("VIBRATION", "RC")
-                    BluetoothManager.sendText("RC")
+                    if (distanceMeter >= 50) "RC50" else "RC25"
                 } else {
-                    Log.d("VIBRATION", "R")
-                    BluetoothManager.sendText("R")
+                    "R25"
                 }
             }
 
-            TurnType.STRAIGHT -> {}
+            TurnType.STRAIGHT -> null
+        } ?: return
+
+        // readyToWrite가 false여도 바로 return 하지 않음.
+        // 화면 전환 후 listener가 준비 상태를 다시 못 받으면 false로 남을 수 있어서,
+        // BluetoothManager.sendText()의 실제 결과를 기준으로 판단한다.
+        val ok = BluetoothManager.sendText(command)
+
+        if (ok) {
+            Log.d(
+                "VIBRATION",
+                "전송 성공: $command, ready=$readyToWrite, continuous=$isContinuous, distance=$distanceMeter"
+            )
+        } else {
+            Log.w(
+                "VIBRATION",
+                "전송 실패: $command, ready=$readyToWrite, BLE 연결/특성 준비 상태 확인 필요"
+            )
         }
     }
 
-    private fun startRepeating(target: TurnEvent) {
+    private fun sendVibration(type: TurnType, isContinuous: Boolean) {
+        sendNavigationCommand(type, isContinuous, 25)
+    }
+
+    private fun startRepeating(type: TurnType, isContinuous: Boolean) {
         repeatHandler = Handler(Looper.getMainLooper())
         repeatRunnable = object : Runnable {
             override fun run() {
-                sendGuideCommand(target,25)
+                sendVibration(type, isContinuous)
                 repeatHandler?.postDelayed(this, 2000)
             }
         }
@@ -784,6 +932,7 @@ class DrivingActivity : AppCompatActivity(),
 
     override fun onReadyToWrite(ready: Boolean) {
         readyToWrite = ready
+        Log.d("DrivingActivity_BLE", "readyToWrite=$ready")
     }
 
     override fun onDestroy() {

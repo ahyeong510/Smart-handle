@@ -4,90 +4,89 @@
     android:layout_height="match_parent">
 
     <LinearLayout
-        android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:padding="20dp"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-
-        <TextView
-            android:id="@+id/textTitle"
-            android:text="Device"
-            android:textStyle="bold"
-            android:textSize="20sp"
-            android:layout_marginBottom="10dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
 
         <TextView
             android:id="@+id/textStatus"
-            android:text="기기 연결 안됨 ✖"
-            android:textSize="16sp"
-            android:layout_marginBottom="14dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="기기 상태"
+            android:textSize="18sp"
+            android:paddingBottom="16dp" />
 
         <Button
             android:id="@+id/btnConnect"
-            android:text="기기 연결"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 모터 테스트 -->
-        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="horizontal">
+            android:text="기기 연결" />
 
-            <Button
-                android:id="@+id/btnLeft"
-                android:text="왼쪽 모터 테스트"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="44dp"
-                android:layout_marginEnd="8dp"/>
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="16dp" />
 
-            <Button
-                android:id="@+id/btnRight"
-                android:text="오른쪽 모터 테스트"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="44dp"
-                android:layout_marginStart="8dp"/>
-        </LinearLayout>
+        <Button
+            android:id="@+id/btnLeft"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="좌회전 진동 (L)" />
 
-        <!-- LED 테스트 -->
+        <Button
+            android:id="@+id/btnRight"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="우회전 진동 (R)" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="24dp" />
+
         <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:text="LED 테스트"
             android:textStyle="bold"
             android:textSize="18sp"
-            android:layout_marginTop="28dp"
-            android:layout_marginBottom="12dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:paddingBottom="12dp" />
 
-        <!-- 방향 선택 -->
-        <Spinner
-            android:id="@+id/spinnerLedDirection"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginBottom="12dp" />
-
-        <!-- count 선택 -->
-        <Spinner
-            android:id="@+id/spinnerLedCount"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginBottom="16dp" />
-
-        <!-- LED 전송 -->
         <Button
-            android:id="@+id/btnLedSend"
-            android:text="LED 신호 전송 테스트"
+            android:id="@+id/btnL25"
             android:layout_width="match_parent"
-            android:layout_height="48dp" />
+            android:layout_height="wrap_content"
+            android:text="일반 좌회전 (L25)" />
+
+        <Button
+            android:id="@+id/btnR25"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="일반 우회전 (R25)" />
+
+        <Button
+            android:id="@+id/btnLC50"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="연속 좌회전 50m (LC50)" />
+
+        <Button
+            android:id="@+id/btnLC25"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="연속 좌회전 25m (LC25)" />
+
+        <Button
+            android:id="@+id/btnRC50"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="연속 우회전 50m (RC50)" />
+
+        <Button
+            android:id="@+id/btnRC25"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="연속 우회전 25m (RC25)" />
 
     </LinearLayout>
+
 </ScrollView>

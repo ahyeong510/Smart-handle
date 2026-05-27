@@ -9,10 +9,7 @@ import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.Spinner
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -27,9 +24,12 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
     private lateinit var btnLeft: Button
     private lateinit var btnRight: Button
 
-    private lateinit var spinnerLedDirection: Spinner
-    private lateinit var spinnerLedCount: Spinner
-    private lateinit var btnLedSend: Button
+    private lateinit var btnL25: Button
+    private lateinit var btnR25: Button
+    private lateinit var btnLC50: Button
+    private lateinit var btnLC25: Button
+    private lateinit var btnRC50: Button
+    private lateinit var btnRC25: Button
 
     private var isConnected = false
     private var readyToWrite = false
@@ -64,19 +64,20 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         btnLeft = view.findViewById(R.id.btnLeft)
         btnRight = view.findViewById(R.id.btnRight)
 
-        spinnerLedDirection = view.findViewById(R.id.spinnerLedDirection)
-        spinnerLedCount = view.findViewById(R.id.spinnerLedCount)
-        btnLedSend = view.findViewById(R.id.btnLedSend)
+        btnL25 = view.findViewById(R.id.btnL25)
+        btnR25 = view.findViewById(R.id.btnR25)
+        btnLC50 = view.findViewById(R.id.btnLC50)
+        btnLC25 = view.findViewById(R.id.btnLC25)
+        btnRC50 = view.findViewById(R.id.btnRC50)
+        btnRC25 = view.findViewById(R.id.btnRC25)
 
         btnLeft.isEnabled = false
         btnRight.isEnabled = false
-        btnLedSend.isEnabled = false
+        setLedButtonsEnabled(false)
 
         setStatus("기기 연결 안됨 ✖")
 
         BluetoothManager.attachListener(this)
-
-        setupLedUi()
 
         btnConnect.setOnClickListener {
             if (!isConnected) {
@@ -87,87 +88,60 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         }
 
         btnLeft.setOnClickListener {
-            if (readyToWrite) {
-                BluetoothManager.sendText("L")
-                setStatus("📤 L 전송됨")
-            } else {
-                setStatus("⚠️ 아직 전송 준비 안됨")
-            }
+            sendCommand("L")
         }
 
         btnRight.setOnClickListener {
-            if (readyToWrite) {
-                BluetoothManager.sendText("R")
-                setStatus("📤 R 전송됨")
-            } else {
-                setStatus("⚠️ 아직 전송 준비 안됨")
-            }
+            sendCommand("R")
         }
 
-        btnLedSend.setOnClickListener {
-            if (!readyToWrite) {
-                setStatus("⚠️ 아직 전송 준비 안됨")
-                return@setOnClickListener
-            }
+        btnL25.setOnClickListener {
+            sendCommand("L25")
+        }
 
-            val direction = spinnerLedDirection.selectedItem.toString()
-            val count = spinnerLedCount.selectedItem.toString()
+        btnR25.setOnClickListener {
+            sendCommand("R25")
+        }
 
-            val command = "$direction,$count\n"
+        btnLC50.setOnClickListener {
+            sendCommand("LC50")
+        }
 
-            val ok = BluetoothManager.sendText(command)
+        btnLC25.setOnClickListener {
+            sendCommand("LC25")
+        }
 
-            if (ok) {
-                setStatus("📤 LED 전송: $direction,$count")
-            } else {
-                setStatus("⚠️ LED 전송 실패")
-            }
+        btnRC50.setOnClickListener {
+            sendCommand("RC50")
+        }
+
+        btnRC25.setOnClickListener {
+            sendCommand("RC25")
         }
     }
 
-    private fun setupLedUi() {
-        val directions = listOf("L", "R", "S")
+    private fun sendCommand(command: String) {
+        if (!readyToWrite) {
+            setStatus("⚠️ 아직 전송 준비 안됨")
+            return
+        }
 
-        val directionAdapter = ArrayAdapter(
-            requireContext(),
-            android.R.layout.simple_spinner_dropdown_item,
-            directions
-        )
+        val ok = BluetoothManager.sendText(command)
 
-        spinnerLedDirection.adapter = directionAdapter
-
-        updateCountSpinner("L")
-
-        spinnerLedDirection.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-
-                override fun onItemSelected(
-                    parent: AdapterView<*>?,
-                    view: View?,
-                    position: Int,
-                    id: Long
-                ) {
-                    updateCountSpinner(directions[position])
-                }
-
-                override fun onNothingSelected(parent: AdapterView<*>?) {}
-            }
-    }
-
-    private fun updateCountSpinner(direction: String) {
-        val counts = if (direction == "S") {
-            listOf("0")
+        if (ok) {
+            setStatus("📤 $command 전송됨")
         } else {
-            listOf("1", "2", "3")
+            setStatus("⚠️ $command 전송 실패")
         }
+    }
 
-        val countAdapter = ArrayAdapter(
-            requireContext(),
-            android.R.layout.simple_spinner_dropdown_item,
-            counts
-        )
-
-        spinnerLedCount.adapter = countAdapter
+    private fun setLedButtonsEnabled(enabled: Boolean) {
+        btnL25.isEnabled = enabled
+        btnR25.isEnabled = enabled
+        btnLC50.isEnabled = enabled
+        btnLC25.isEnabled = enabled
+        btnRC50.isEnabled = enabled
+        btnRC25.isEnabled = enabled
     }
 
     private fun ensurePermissions() {
@@ -278,6 +252,10 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
             } else {
                 btnConnect.text = "기기 연결"
                 textStatus.text = "연결 끊김"
+
+                btnLeft.isEnabled = false
+                btnRight.isEnabled = false
+                setLedButtonsEnabled(false)
             }
         }
     }
@@ -292,7 +270,7 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
 
             btnLeft.isEnabled = ready
             btnRight.isEnabled = ready
-            btnLedSend.isEnabled = ready
+            setLedButtonsEnabled(ready)
 
             if (ready) {
                 setStatus("📡 전송 준비됨")

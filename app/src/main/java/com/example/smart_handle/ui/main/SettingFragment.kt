@@ -13,7 +13,6 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.example.smart_handle.R
 import com.example.smart_handle.auth.LoginActivity
-import com.example.smart_handle.ui.fitness.RideHistory
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -29,10 +28,10 @@ class SettingFragment : Fragment() {
     private lateinit var tvUserEmail: TextView
 
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
+        inflater: LayoutInflater,
+        container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-
         val view = inflater.inflate(R.layout.fragment_setting, container, false)
 
         distanceSeek = view.findViewById(R.id.distanceSeek)
@@ -86,6 +85,7 @@ class SettingFragment : Fragment() {
 
     private fun loadRideHistory() {
         val user = FirebaseAuth.getInstance().currentUser
+
         if (user == null) {
             Toast.makeText(requireContext(), "로그인 후 이용해주세요.", Toast.LENGTH_SHORT).show()
             return
@@ -98,7 +98,7 @@ class SettingFragment : Fragment() {
             .document(user.uid)
             .collection("ride_history")
             .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(10)
+            .limit(5)
             .get()
             .addOnSuccessListener { result ->
                 btnHistory.isEnabled = true
@@ -112,44 +112,39 @@ class SettingFragment : Fragment() {
                     return@addOnSuccessListener
                 }
 
-                val items = result.documents.mapIndexed { index, doc ->
+                val message = StringBuilder()
 
-                    val routeType = doc.getString("routeType") ?: "-"
-                    val routeTypeText = when (routeType) {
-                        "fitness" -> "운동"
-                        "tour" -> "관광지 코스"
-                        "navigation" -> "길찾기"
-                        else -> routeType
-                    }
-
+                result.documents.forEachIndexed { index, doc ->
                     val distanceKm = doc.getDouble("distanceKm") ?: 0.0
-                    val durationMin = doc.getLong("durationMin") ?: 0L
-                    val actualDurationSec = doc.getLong("actualDurationSec") ?: 0L
+                    val durationMin = doc.getLong("durationMin")
+                    val elevationGain = doc.getLong("elevationGain")
+                    val turnCount = doc.getLong("turnCount")
                     val satisfaction = doc.getString("satisfaction") ?: "-"
-                    val completionPercent = doc.getLong("completionPercent") ?: 0L
+                    val completionPercent = doc.getLong("completionPercent")
 
-                    val durationText = if (actualDurationSec > 0) {
-                        "${actualDurationSec / 60}분"
-                    } else {
-                        "${durationMin}분"
+                    val durationText =
+                        if (durationMin != null && durationMin > 0) "${durationMin}분" else "-"
+
+                    val elevationText =
+                        if (elevationGain != null && elevationGain > 0) "${elevationGain}m" else "-"
+
+                    val turnText =
+                        if (turnCount != null && turnCount > 0) "${turnCount}회" else "-"
+
+                    val completionText =
+                        if (completionPercent != null && completionPercent > 0) "${completionPercent}%" else "-"
+
+                    message.append("${index + 1}. 거리 ${String.format("%.2f", distanceKm)}km | 시간 $durationText\n")
+                    message.append("   고도 $elevationText | 회전 $turnText | 만족도 $satisfaction | 완주율 $completionText")
+
+                    if (index != result.size() - 1) {
+                        message.append("\n\n")
                     }
-
-                    val completionText = if (completionPercent > 0) {
-                        " / 주행률: ${completionPercent}%"
-                    } else {
-                        ""
-                    }
-
-                    "${index + 1}. [$routeTypeText] " +
-                            "${String.format("%.2f", distanceKm)} km / " +
-                            "$durationText / " +
-                            "만족도: $satisfaction" +
-                            completionText
-                }.toTypedArray()
+                }
 
                 AlertDialog.Builder(requireContext())
                     .setTitle("지난 기록")
-                    .setItems(items, null)
+                    .setMessage(message.toString())
                     .setPositiveButton("닫기", null)
                     .show()
             }

@@ -4,89 +4,117 @@
     android:layout_height="match_parent">
 
     <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:gravity="center_horizontal"
+        android:padding="20dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/textTitle"
+            android:text="Device"
+            android:textStyle="bold"
+            android:textSize="20sp"
+            android:layout_marginBottom="10dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
 
         <TextView
             android:id="@+id/textStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="기기 상태"
-            android:textSize="18sp"
-            android:paddingBottom="16dp" />
+            android:text="기기 연결 안됨 ✖"
+            android:textSize="16sp"
+            android:layout_marginBottom="14dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
 
         <Button
             android:id="@+id/btnConnect"
+            android:text="기기 연결"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginBottom="16dp" />
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="기기 연결" />
+            android:gravity="center"
+            android:orientation="horizontal">
 
-        <Space
-            android:layout_width="match_parent"
-            android:layout_height="16dp" />
+            <Button
+                android:id="@+id/btnLeft"
+                android:text="왼쪽 모터 테스트"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="44dp"
+                android:layout_marginEnd="8dp" />
 
-        <Button
-            android:id="@+id/btnLeft"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="좌회전 진동 (L)" />
-
-        <Button
-            android:id="@+id/btnRight"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="우회전 진동 (R)" />
-
-        <Space
-            android:layout_width="match_parent"
-            android:layout_height="24dp" />
+            <Button
+                android:id="@+id/btnRight"
+                android:text="오른쪽 모터 테스트"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="44dp"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
 
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="LED 테스트"
+            android:text="LED / 도착 신호 테스트"
             android:textStyle="bold"
             android:textSize="18sp"
-            android:paddingBottom="12dp" />
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="12dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
 
         <Button
             android:id="@+id/btnL25"
+            android:text="좌회전 빨강 LED / L25"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="일반 좌회전 (L25)" />
+            android:layout_height="48dp" />
 
         <Button
             android:id="@+id/btnR25"
+            android:text="우회전 빨강 LED / R25"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="일반 우회전 (R25)" />
+            android:layout_height="48dp" />
 
         <Button
             android:id="@+id/btnLC50"
+            android:text="좌회전 파랑 LED / LC50"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="연속 좌회전 50m (LC50)" />
-
-        <Button
-            android:id="@+id/btnLC25"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="연속 좌회전 25m (LC25)" />
+            android:layout_height="48dp" />
 
         <Button
             android:id="@+id/btnRC50"
+            android:text="우회전 파랑 LED / RC50"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="연속 우회전 50m (RC50)" />
+            android:layout_height="48dp" />
+
+        <Button
+            android:id="@+id/btnLC25"
+            android:text="좌회전 25 테스트 / LC25"
+            android:layout_width="match_parent"
+            android:layout_height="48dp" />
 
         <Button
             android:id="@+id/btnRC25"
+            android:text="우회전 25 테스트 / RC25"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="연속 우회전 25m (RC25)" />
+            android:layout_height="48dp" />
+
+        <Button
+            android:id="@+id/btnArrival"
+            android:text="도착 신호 초록 LED / A"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="12dp" />
+
+        <Button
+            android:id="@+id/btnStop"
+            android:text="전체 정지 / S"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp" />
 
     </LinearLayout>
-
 </ScrollView>

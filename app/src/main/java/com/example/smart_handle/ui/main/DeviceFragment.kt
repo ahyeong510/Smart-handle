@@ -30,6 +30,8 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
     private lateinit var btnLC25: Button
     private lateinit var btnRC50: Button
     private lateinit var btnRC25: Button
+    private lateinit var btnArrival: Button
+    private lateinit var btnStop: Button
 
     private var isConnected = false
     private var readyToWrite = false
@@ -70,10 +72,10 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         btnLC25 = view.findViewById(R.id.btnLC25)
         btnRC50 = view.findViewById(R.id.btnRC50)
         btnRC25 = view.findViewById(R.id.btnRC25)
+        btnArrival = view.findViewById(R.id.btnArrival)
+        btnStop = view.findViewById(R.id.btnStop)
 
-        btnLeft.isEnabled = false
-        btnRight.isEnabled = false
-        setLedButtonsEnabled(false)
+        setAllCommandButtonsEnabled(false)
 
         setStatus("기기 연결 안됨 ✖")
 
@@ -118,6 +120,14 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         btnRC25.setOnClickListener {
             sendCommand("RC25")
         }
+
+        btnArrival.setOnClickListener {
+            sendCommand("A")
+        }
+
+        btnStop.setOnClickListener {
+            sendCommand("S")
+        }
     }
 
     private fun sendCommand(command: String) {
@@ -135,13 +145,18 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         }
     }
 
-    private fun setLedButtonsEnabled(enabled: Boolean) {
+    private fun setAllCommandButtonsEnabled(enabled: Boolean) {
+        btnLeft.isEnabled = enabled
+        btnRight.isEnabled = enabled
+
         btnL25.isEnabled = enabled
         btnR25.isEnabled = enabled
         btnLC50.isEnabled = enabled
         btnLC25.isEnabled = enabled
         btnRC50.isEnabled = enabled
         btnRC25.isEnabled = enabled
+        btnArrival.isEnabled = enabled
+        btnStop.isEnabled = enabled
     }
 
     private fun ensurePermissions() {
@@ -166,7 +181,6 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
                 needs += Manifest.permission.BLUETOOTH_CONNECT
             }
 
-            // 삼성/일부 기기 BLE 스캔 안정화용으로 위치 권한도 같이 요청
             if (
                 ContextCompat.checkSelfPermission(
                     requireContext(),
@@ -184,7 +198,6 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
             ) {
                 needs += Manifest.permission.ACCESS_COARSE_LOCATION
             }
-
         } else {
             if (
                 ContextCompat.checkSelfPermission(
@@ -252,10 +265,7 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
             } else {
                 btnConnect.text = "기기 연결"
                 textStatus.text = "연결 끊김"
-
-                btnLeft.isEnabled = false
-                btnRight.isEnabled = false
-                setLedButtonsEnabled(false)
+                setAllCommandButtonsEnabled(false)
             }
         }
     }
@@ -268,9 +278,7 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         activity?.runOnUiThread {
             if (!isAdded || view == null) return@runOnUiThread
 
-            btnLeft.isEnabled = ready
-            btnRight.isEnabled = ready
-            setLedButtonsEnabled(ready)
+            setAllCommandButtonsEnabled(ready)
 
             if (ready) {
                 setStatus("📡 전송 준비됨")

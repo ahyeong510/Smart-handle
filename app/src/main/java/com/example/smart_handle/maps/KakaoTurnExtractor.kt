@@ -5,6 +5,7 @@ import android.util.Log
 import com.google.android.gms.maps.model.LatLng
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sqrt
 
@@ -12,10 +13,11 @@ object KakaoTurnExtractor {
 
     private const val TAG = "KAKAO_TURN"
 
-    private const val DUPLICATE_DISTANCE_M = 14f
-    private const val GUIDE_NEAR_DISTANCE_M = 18f
-    private const val START_END_SKIP_DISTANCE_M = 18f
-    private const val ROAD_BOUNDARY_MIN_DISTANCE_M = 18f
+    // 기존 값이 너무 크면 짧은 골목/교차로가 guide 근처라는 이유로 전부 제거될 수 있음.
+    // 그래서 캡스톤 테스트용으로 STRAIGHT 후보를 조금 더 보존하는 쪽으로 완화함.
+    private const val DUPLICATE_DISTANCE_M = 8f
+    private const val START_END_SKIP_DISTANCE_M = 12f
+    private const val ROAD_BOUNDARY_MIN_DISTANCE_M = 10f
 
     private data class Candidate(
         val location: LatLng,
@@ -48,11 +50,12 @@ object KakaoTurnExtractor {
                     val roadPoints = extractRoadPoints(road)
                     if (roadPoints.isEmpty()) continue
 
+                    // roadStart/roadEnd는 "경로가 나뉜 지점" 후보로 사용한다.
+                    // 실제 모든 골목을 100% 의미하지는 않지만, Kakao 응답만으로 가능한 가장 쉬운 후보임.
                     if (routePoints.isNotEmpty()) {
-                        val boundary = roadPoints.first()
                         roadBoundaryCandidates.add(
                             Candidate(
-                                location = boundary,
+                                location = roadPoints.first(),
                                 type = TurnType.STRAIGHT,
                                 source = "roadStart[$sectionIndex,$roadIndex]",
                                 order = order++
@@ -101,10 +104,14 @@ object KakaoTurnExtractor {
                 roadBoundaryCandidates = roadBoundaryCandidates
             )
 
+            val straightCount = merged.count { it.type == TurnType.STRAIGHT }
+            val directionalCount = merged.size - straightCount
+
             Log.d(
                 TAG,
                 "routePoints=${routePoints.size}, guides=${guideCandidates.size}, " +
-                        "roadBoundaries=${roadBoundaryCandidates.size}, finalEvents=${merged.size}"
+                        "roadBoundariesRaw=${roadBoundaryCandidates.size}, " +
+                        "finalEvents=${merged.size}, straight=$straightCount, directional=$directionalCount"
             )
 
             merged.forEachIndexed { index, candidate ->
@@ -133,37 +140,38 @@ object KakaoTurnExtractor {
         guideCandidates: List<Candidate>,
         roadBoundaryCandidates: List<Candidate>
     ): List<Candidate> {
-        val routeStart = routePoints.firstOrNull()
-        val routeEnd = routePoints.lastOrNull()
+        if (routePoints.size < 2) return guideCandidates
+
+        val routeTotalM = calculateRouteTotalDistance(routePoints)
+
+        val allRaw = ArrayList<Candidate>()
+        allRaw.addAll(guideCandidates)
+        allRaw.addAll(roadBoundaryCandidates)
+
+        for (candidate in allRaw) {
+            candidate.progressMeters = calculateRouteProgress(routePoints, candidate.location)
+                ?: candidate.order.toFloat()
+        }
 
         val filteredRoadBoundaries = roadBoundaryCandidates
             .filter { candidate ->
-                if (routeStart != null && distance(candidate.location, routeStart) < START_END_SKIP_DISTANCE_M) {
-                    return@filter false
-                }
-
-                if (routeEnd != null && distance(candidate.location, routeEnd) < START_END_SKIP_DISTANCE_M) {
-                    return@filter false
-                }
-
-                if (guideCandidates.any { guide -> distance(candidate.location, guide.location) < GUIDE_NEAR_DISTANCE_M }) {
-                    return@filter false
-                }
-
-                true
+                val p = candidate.progressMeters
+                // 출발/도착 바로 근처의 road boundary는 안내 교차로로 쓰면 출발하자마자 꼬일 수 있어서 제거
+                p >= START_END_SKIP_DISTANCE_M && p <= routeTotalM - START_END_SKIP_DISTANCE_M
             }
-            .distinctByDistance(ROAD_BOUNDARY_MIN_DISTANCE_M)
+            .distinctByDistanceAndProgress(ROAD_BOUNDARY_MIN_DISTANCE_M)
+
+        Log.d(
+            TAG,
+            "merge: guides=${guideCandidates.size}, roadRaw=${roadBoundaryCandidates.size}, " +
+                    "roadAfterStartEnd=${filteredRoadBoundaries.size}, routeTotal=${routeTotalM.toInt()}m"
+        )
 
         val all = ArrayList<Candidate>()
         all.addAll(guideCandidates)
         all.addAll(filteredRoadBoundaries)
 
         if (all.isEmpty()) return emptyList()
-
-        for (candidate in all) {
-            candidate.progressMeters = calculateRouteProgress(routePoints, candidate.location)
-                ?: candidate.order.toFloat()
-        }
 
         val sorted = all.sortedWith(
             compareBy<Candidate> { it.progressMeters }.thenBy { it.order }
@@ -174,12 +182,13 @@ object KakaoTurnExtractor {
         for (candidate in sorted) {
             val last = merged.lastOrNull()
 
-            if (last != null && distance(last.location, candidate.location) < DUPLICATE_DISTANCE_M) {
+            if (last != null && isDuplicateEvent(last, candidate)) {
                 val replaceLast = isDirectional(candidate.type) && !isDirectional(last.type)
 
                 if (replaceLast) {
                     merged[merged.lastIndex] = candidate
                 }
+                // 둘 다 방향 안내거나, 둘 다 STRAIGHT면 기존 것을 유지한다.
             } else {
                 merged.add(candidate)
             }
@@ -188,11 +197,21 @@ object KakaoTurnExtractor {
         return merged
     }
 
-    private fun List<Candidate>.distinctByDistance(minDistanceMeters: Float): List<Candidate> {
+    private fun isDuplicateEvent(a: Candidate, b: Candidate): Boolean {
+        return distance(a.location, b.location) < DUPLICATE_DISTANCE_M ||
+                abs(a.progressMeters - b.progressMeters) < DUPLICATE_DISTANCE_M
+    }
+
+    private fun List<Candidate>.distinctByDistanceAndProgress(minDistanceMeters: Float): List<Candidate> {
         val result = ArrayList<Candidate>()
 
-        for (candidate in this.sortedBy { it.order }) {
-            if (result.none { existing -> distance(existing.location, candidate.location) < minDistanceMeters }) {
+        for (candidate in this.sortedWith(compareBy<Candidate> { it.progressMeters }.thenBy { it.order })) {
+            val duplicated = result.any { existing ->
+                distance(existing.location, candidate.location) < minDistanceMeters ||
+                        abs(existing.progressMeters - candidate.progressMeters) < minDistanceMeters
+            }
+
+            if (!duplicated) {
                 result.add(candidate)
             }
         }
@@ -248,6 +267,16 @@ object KakaoTurnExtractor {
 
     private fun isDirectional(type: TurnType): Boolean {
         return type == TurnType.LEFT || type == TurnType.RIGHT
+    }
+
+    private fun calculateRouteTotalDistance(routePoints: List<LatLng>): Float {
+        var total = 0f
+
+        for (i in 0 until routePoints.lastIndex) {
+            total += distance(routePoints[i], routePoints[i + 1])
+        }
+
+        return total
     }
 
     private fun calculateRouteProgress(routePoints: List<LatLng>, point: LatLng): Float? {

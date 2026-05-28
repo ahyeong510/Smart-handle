@@ -123,12 +123,17 @@ object KakaoTurnExtractor {
                 )
             }
 
-            return merged.map { candidate ->
+            val extractedTurns = merged.map { candidate ->
                 TurnEvent(
                     location = candidate.location,
                     type = candidate.type
                 )
             }
+
+            // 동수원IC/고래등공원 테스트 구간은 Kakao guide만으로는
+            // X 구간 OFF → 파란 구간 BLUE → 빨간 구간 RED 순서를 안정적으로 만들기 어렵다.
+            // 그래서 실제 길에서 찍은 로컬 기준점을 IntersectionAugmenter에서 한 번 더 보정한다.
+            return IntersectionAugmenter.augment(routePoints, extractedTurns)
         } catch (e: Exception) {
             Log.e(TAG, "extractTurnEvents error: ${e.message}", e)
             return emptyList()

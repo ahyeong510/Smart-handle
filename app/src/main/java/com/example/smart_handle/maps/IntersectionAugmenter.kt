@@ -8,22 +8,27 @@ object IntersectionAugmenter {
 
     private const val TAG = "INTERSECTION_AUG"
 
-    private val DEMO_ANCHORS = listOf(
-        LatLng(37.3010974, 127.0373927),
+    // 실제 길 테스트 기준:
+    // 1) DEMO_BLUE_START_POINT 전 X 구간 = LED OFF
+    // 2) DEMO_BLUE_START_POINT 통과 후 = RC2/LC2 파란 LED
+    // 3) DEMO_RED_START_POINT 통과 후 = RC1/LC1 빨간 LED
+    // 4) DEMO_RIGHT_TURN_POINT = 실제 우회전 지점
+    private val DEMO_BLUE_START_POINT =
+        LatLng(37.3010974, 127.0373927)
+
+    private val DEMO_RED_START_POINT =
+        LatLng(37.30124854082333, 127.03777655386224)
+
+    private val DEMO_RIGHT_TURN_POINT =
         LatLng(37.3016181308997, 127.03779440476745)
+
+    private val DEMO_ANCHORS = listOf(
+        DEMO_BLUE_START_POINT,
+        DEMO_RED_START_POINT,
+        DEMO_RIGHT_TURN_POINT
     )
 
     private const val DEMO_ROUTE_RADIUS_M = 180f
-
-    // X 구간 이후 처음 지나치는 교차로 지점
-    // 이 지점을 지나기 전까지 RC2 파란 LED 유지
-    private val DEMO_STRAIGHT_POINT =
-        LatLng(37.30124854082333, 127.03777655386224)
-
-    // 실제 우회전해야 하는 다음 골목
-    // DEMO_STRAIGHT_POINT 통과 후 RC1 빨간 LED
-    private val DEMO_RIGHT_TURN_POINT =
-        LatLng(37.3016181308997, 127.03779440476745)
 
     fun augment(
         routePoints: List<LatLng>,
@@ -36,12 +41,21 @@ object IntersectionAugmenter {
             return kakaoTurns
         }
 
-        val straightProgress = calculateRouteProgress(routePoints, DEMO_STRAIGHT_POINT)
+        val blueStartProgress = calculateRouteProgress(routePoints, DEMO_BLUE_START_POINT)
+        val redStartProgress = calculateRouteProgress(routePoints, DEMO_RED_START_POINT)
         val rightProgress = calculateRouteProgress(routePoints, DEMO_RIGHT_TURN_POINT)
 
         val result = mutableListOf<TurnEvent>()
 
-        result += TurnEvent(DEMO_STRAIGHT_POINT, TurnType.STRAIGHT)
+        // 파란 LED 시작 기준점.
+        // 이 지점 전에는 남은 교차로 수가 3개라서 DrivingActivity에서 LED가 꺼진다.
+        result += TurnEvent(DEMO_BLUE_START_POINT, TurnType.STRAIGHT)
+
+        // 빨간 LED 시작 기준점.
+        // 이 지점을 지나면 실제 우회전까지 남은 교차로 수가 1개가 되어 빨간 LED가 켜진다.
+        result += TurnEvent(DEMO_RED_START_POINT, TurnType.STRAIGHT)
+
+        // 실제 우회전 지점.
         result += TurnEvent(DEMO_RIGHT_TURN_POINT, TurnType.RIGHT)
 
         kakaoTurns.forEach { event ->
@@ -62,7 +76,8 @@ object IntersectionAugmenter {
 
         Log.d(
             TAG,
-            "demo augment applied: straight=${straightProgress.toInt()}m, " +
+            "demo augment applied: blueStart=${blueStartProgress.toInt()}m, " +
+                    "redStart=${redStartProgress.toInt()}m, " +
                     "right=${rightProgress.toInt()}m, result=${sorted.size}"
         )
 

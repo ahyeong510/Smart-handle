@@ -124,6 +124,11 @@ class DrivingActivity : AppCompatActivity(),
         // route progress 기준으로 교차로를 이만큼 지난 뒤 통과 처리
         private const val TURN_PASS_AFTER_PROGRESS_M = 8f
 
+        // 현재 위치가 턴/교차로 좌표 15m 이내로 들어오면
+        // 해당 턴/교차로는 통과한 것으로 보고 바로 다음 안내로 넘긴다.
+        private const val TURN_AUTO_ADVANCE_DISTANCE_M = 15f
+        private const val TURN_AUTO_ADVANCE_PROGRESS_BEFORE_M = 15f
+
         // route progress 계산이 불가능할 때만 쓰는 예비 거리 기준
         private const val TURN_PASS_DISTANCE_M = 15f
 
@@ -143,6 +148,18 @@ class DrivingActivity : AppCompatActivity(),
         // 진동은 실제 회전 50m 전부터 반복
         private const val VIBRATION_START_DISTANCE_M = 50f
         private const val VIBRATION_REPEAT_INTERVAL_MS = 700L
+
+        // 동수원IC/고래등공원 테스트 길 전용 좌표.
+        // 로그에서 잡힌 첫 좌회전은 안내는 하되 LED/진동은 끄고,
+        // 그 뒤 첫 실제 우회전까지는 IntersectionAugmenter가 넣어준
+        // 2개의 STRAIGHT 기준점으로 OFF -> BLUE -> RED 순서를 만든다.
+        private val DONGSUWON_TEST_FIRST_LEFT_POINT =
+            LatLng(37.29871759651548, 127.043471040601)
+
+        private val DONGSUWON_TEST_FIRST_RIGHT_POINT =
+            LatLng(37.29787613130404, 127.04527509683943)
+
+        private const val DONGSUWON_TEST_MATCH_DISTANCE_M = 35f
     }
 
     private data class RouteProjection(
@@ -684,17 +701,35 @@ class DrivingActivity : AppCompatActivity(),
 
         updateTurnCard(target, displayDist, remainingIntersectionCount)
 
-        val ledCommand = getIntersectionBasedLedCommand(
-            target.type,
-            remainingIntersectionCount
-        )
+        val suppressSignalForDemoFirstLeft =
+            shouldSuppressSignalForDongSuwonTestFirstLeft(
+                targetTurnIndex = targetTurnIndex,
+                target = target
+            )
+
+        val ledCommand =
+            if (suppressSignalForDemoFirstLeft) {
+                null
+            } else {
+                getIntersectionBasedLedCommand(
+                    target.type,
+                    remainingIntersectionCount
+                )
+            }
+
         setLedCommand(
             ledCommand,
-            "intersections=${remainingIntersectionCount}, dist=${displayDist}m"
+            if (suppressSignalForDemoFirstLeft) {
+                "dongSuwon test first left: LED off"
+            } else {
+                "intersections=${remainingIntersectionCount}, dist=${displayDist}m"
+            }
         )
 
         val vibrationCommand =
-            if (distToTarget <= VIBRATION_START_DISTANCE_M) {
+            if (suppressSignalForDemoFirstLeft) {
+                null
+            } else if (distToTarget <= VIBRATION_START_DISTANCE_M) {
                 getVibrationCommand(target.type)
             } else {
                 null
@@ -719,22 +754,41 @@ class DrivingActivity : AppCompatActivity(),
             val currentProgress = getStableRouteProgress(current) ?: return
 
             while (nextTurnIndex < turnEvents.size) {
+                val event = turnEvents[nextTurnIndex]
                 val eventProgress = turnProgressMeters.getOrNull(nextTurnIndex) ?: break
+                val distToEvent = distance(current, event.location)
 
-                if (currentProgress < eventProgress + TURN_PASS_AFTER_PROGRESS_M) {
+                val passedByProgress =
+                    currentProgress >= eventProgress + TURN_PASS_AFTER_PROGRESS_M
+
+                val reachedWithin15m =
+                    canAutoAdvanceByNearDistance(event) &&
+                            distToEvent <= TURN_AUTO_ADVANCE_DISTANCE_M &&
+                            currentProgress >= eventProgress - TURN_AUTO_ADVANCE_PROGRESS_BEFORE_M
+
+                if (!passedByProgress && !reachedWithin15m) {
                     break
                 }
 
-                val event = turnEvents[nextTurnIndex]
+                val passReason =
+                    if (reachedWithin15m) {
+                        "15m 이내 진입"
+                    } else {
+                        "경로 진행률 기준 통과"
+                    }
 
                 Log.d(
                     "NAV_DISTANCE",
-                    "경로 진행률 기준 교차로 통과: idx=$nextTurnIndex, " +
-                            "type=${event.type}, currentProgress=${currentProgress.roundToInt()}m, " +
+                    "$passReason: idx=$nextTurnIndex, type=${event.type}, " +
+                            "dist=${distToEvent.roundToInt()}m, " +
+                            "currentProgress=${currentProgress.roundToInt()}m, " +
                             "eventProgress=${eventProgress.roundToInt()}m"
                 )
 
-                stopAllSignals("turn/intersection passed by route progress", forceSendStop = true)
+                stopAllSignals(
+                    "turn/intersection auto advanced: $passReason",
+                    forceSendStop = true
+                )
                 nextTurnIndex++
             }
 
@@ -752,10 +806,11 @@ class DrivingActivity : AppCompatActivity(),
 
             Log.d(
                 "NAV_DISTANCE",
-                "거리 예비 기준 교차로 통과: idx=$nextTurnIndex, type=${event.type}, dist=${dist.roundToInt()}m"
+                "15m 거리 예비 기준 자동 넘김: idx=$nextTurnIndex, " +
+                        "type=${event.type}, dist=${dist.roundToInt()}m"
             )
 
-            stopAllSignals("turn/intersection passed by fallback distance", forceSendStop = true)
+            stopAllSignals("turn/intersection auto advanced by fallback 15m", forceSendStop = true)
             nextTurnIndex++
         }
     }
@@ -822,6 +877,40 @@ class DrivingActivity : AppCompatActivity(),
                 forceSendStop = true
             )
         }
+    }
+
+    private fun canAutoAdvanceByNearDistance(event: TurnEvent): Boolean {
+        // 사용자가 요청한 "15m 이내면 다음 턴으로 넘김"은 실제 방향 전환(좌/우회전)에만 적용한다.
+        // STRAIGHT는 LED 단계 구분용 가상 교차로라서, 15m 앞에서 미리 넘기면
+        // 파란색/빨간색이 교차로를 지나기 전에 켜질 수 있다.
+        return event.type == TurnType.LEFT || event.type == TurnType.RIGHT
+    }
+
+    private fun shouldSuppressSignalForDongSuwonTestFirstLeft(
+        targetTurnIndex: Int,
+        target: TurnEvent
+    ): Boolean {
+        if (targetTurnIndex != 0) return false
+        if (target.type != TurnType.LEFT) return false
+        if (distance(target.location, DONGSUWON_TEST_FIRST_LEFT_POINT) > DONGSUWON_TEST_MATCH_DISTANCE_M) {
+            return false
+        }
+
+        return isDongSuwonTestRouteActive()
+    }
+
+    private fun isDongSuwonTestRouteActive(): Boolean {
+        val hasFirstLeft = turnEvents.any { event ->
+            event.type == TurnType.LEFT &&
+                    distance(event.location, DONGSUWON_TEST_FIRST_LEFT_POINT) <= DONGSUWON_TEST_MATCH_DISTANCE_M
+        }
+
+        val hasFirstRight = turnEvents.any { event ->
+            event.type == TurnType.RIGHT &&
+                    distance(event.location, DONGSUWON_TEST_FIRST_RIGHT_POINT) <= DONGSUWON_TEST_MATCH_DISTANCE_M
+        }
+
+        return hasFirstLeft && hasFirstRight
     }
 
     private fun updateTurnCard(

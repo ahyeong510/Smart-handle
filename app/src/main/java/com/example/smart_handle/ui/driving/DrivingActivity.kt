@@ -143,11 +143,6 @@ class DrivingActivity : AppCompatActivity(),
         // 진동은 실제 회전 50m 전부터 반복
         private const val VIBRATION_START_DISTANCE_M = 50f
         private const val VIBRATION_REPEAT_INTERVAL_MS = 700L
-
-        // 아두이노/ESP32 없이 안드로이드 로직만 테스트할 때 true.
-        // true이면 BluetoothManager.sendText()를 실제 호출하지 않고 SIM_COMMAND 로그만 찍는다.
-        // ESP32 연결 테스트할 때는 false로 바꿔야 한다.
-        private const val ANDROID_ONLY_TEST_MODE = true
     }
 
     private data class RouteProjection(
@@ -1113,10 +1108,8 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     private fun setVibrationCommand(command: String?) {
-        if (activeVibrationCommand == command) {
-            if (repeatRunnable != null || (ANDROID_ONLY_TEST_MODE && !readyToWrite)) {
-                return
-            }
+        if (activeVibrationCommand == command && repeatRunnable != null) {
+            return
         }
 
         stopVibrationLoop()
@@ -1124,13 +1117,6 @@ class DrivingActivity : AppCompatActivity(),
         if (command == null) return
 
         activeVibrationCommand = command
-
-        // 아두이노 없이 안드로이드만 테스트할 때는 0.7초마다 BLE 실패 로그가 쌓이지 않도록
-        // 진동 명령을 1번만 가상 로그로 찍고 반복 전송은 시작하지 않는다.
-        if (ANDROID_ONLY_TEST_MODE && !readyToWrite) {
-            Log.d("SIM_COMMAND", "가상 진동 시작: $command")
-            return
-        }
 
         repeatHandler = Handler(Looper.getMainLooper())
         repeatRunnable = object : Runnable {
@@ -1176,11 +1162,6 @@ class DrivingActivity : AppCompatActivity(),
         command: String,
         reason: String
     ): Boolean {
-        if (ANDROID_ONLY_TEST_MODE && !readyToWrite) {
-            Log.d("SIM_COMMAND", "가상 전송: $command, reason=$reason, ready=$readyToWrite")
-            return true
-        }
-
         val ok = BluetoothManager.sendText(command)
 
         if (ok) {
@@ -1193,11 +1174,6 @@ class DrivingActivity : AppCompatActivity(),
     }
 
     private fun sendStopCommand(reason: String) {
-        if (ANDROID_ONLY_TEST_MODE && !readyToWrite) {
-            Log.d("SIM_COMMAND", "가상 정지: S, reason=$reason, ready=$readyToWrite")
-            return
-        }
-
         val ok = BluetoothManager.sendText("S")
 
         if (ok) {
@@ -1211,11 +1187,6 @@ class DrivingActivity : AppCompatActivity(),
         if (arrivalSignalSent) return
 
         arrivalSignalSent = true
-
-        if (ANDROID_ONLY_TEST_MODE && !readyToWrite) {
-            Log.d("SIM_COMMAND", "가상 도착 신호: A, ready=$readyToWrite")
-            return
-        }
 
         val ok = BluetoothManager.sendText("A")
 

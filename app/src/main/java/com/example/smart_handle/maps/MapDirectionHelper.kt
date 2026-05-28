@@ -60,7 +60,11 @@ object MapDirectionHelper {
             }
 
             val polyline = extractPolyline(body)
-            val turns = KakaoTurnExtractor.extractTurnEvents(body)
+            val kakaoTurns = KakaoTurnExtractor.extractTurnEvents(body)
+            val turns = IntersectionAugmenter.augment(
+                routePoints = polyline,
+                kakaoTurns = kakaoTurns
+            )
 
             return@withContext RouteResult(
                 points = polyline,

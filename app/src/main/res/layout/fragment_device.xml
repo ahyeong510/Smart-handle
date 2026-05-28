@@ -34,77 +34,54 @@
             android:layout_height="48dp"
             android:layout_marginBottom="16dp" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btnLeft"
-                android:text="왼쪽 모터 테스트"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="44dp"
-                android:layout_marginEnd="8dp" />
-
-            <Button
-                android:id="@+id/btnRight"
-                android:text="오른쪽 모터 테스트"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="44dp"
-                android:layout_marginStart="8dp" />
-        </LinearLayout>
-
         <TextView
-            android:text="LED / 도착 신호 테스트"
+            android:text="LED / 진동 / 도착 신호 테스트"
             android:textStyle="bold"
             android:textSize="18sp"
-            android:layout_marginTop="28dp"
+            android:layout_marginTop="12dp"
             android:layout_marginBottom="12dp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content" />
 
         <Button
-            android:id="@+id/btnL25"
-            android:text="좌회전 빨강 LED / L25"
+            android:id="@+id/btnLC2"
+            android:text="왼쪽 2번째 교차로 파랑 / LC2"
             android:layout_width="match_parent"
             android:layout_height="48dp" />
 
         <Button
-            android:id="@+id/btnR25"
-            android:text="우회전 빨강 LED / R25"
+            android:id="@+id/btnRC2"
+            android:text="오른쪽 2번째 교차로 파랑 / RC2"
             android:layout_width="match_parent"
             android:layout_height="48dp" />
 
         <Button
-            android:id="@+id/btnLC50"
-            android:text="좌회전 파랑 LED / LC50"
+            android:id="@+id/btnLC1"
+            android:text="왼쪽 다음 교차로 빨강 / LC1"
             android:layout_width="match_parent"
             android:layout_height="48dp" />
 
         <Button
-            android:id="@+id/btnRC50"
-            android:text="우회전 파랑 LED / RC50"
+            android:id="@+id/btnRC1"
+            android:text="오른쪽 다음 교차로 빨강 / RC1"
             android:layout_width="match_parent"
             android:layout_height="48dp" />
 
         <Button
-            android:id="@+id/btnLC25"
-            android:text="좌회전 25 테스트 / LC25"
+            android:id="@+id/btnLV"
+            android:text="왼쪽 진동 시작 / LV"
             android:layout_width="match_parent"
             android:layout_height="48dp" />
 
         <Button
-            android:id="@+id/btnRC25"
-            android:text="우회전 25 테스트 / RC25"
+            android:id="@+id/btnRV"
+            android:text="오른쪽 진동 시작 / RV"
             android:layout_width="match_parent"
             android:layout_height="48dp" />
 
         <Button
             android:id="@+id/btnArrival"
-            android:text="도착 신호 초록 LED / A"
+            android:text="도착 신호 / A"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginTop="12dp" />

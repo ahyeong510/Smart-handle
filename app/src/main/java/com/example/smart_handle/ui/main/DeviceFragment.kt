@@ -21,15 +21,13 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
 
     private lateinit var textStatus: TextView
     private lateinit var btnConnect: Button
-    private lateinit var btnLeft: Button
-    private lateinit var btnRight: Button
 
-    private lateinit var btnL25: Button
-    private lateinit var btnR25: Button
-    private lateinit var btnLC50: Button
-    private lateinit var btnLC25: Button
-    private lateinit var btnRC50: Button
-    private lateinit var btnRC25: Button
+    private lateinit var btnLC2: Button
+    private lateinit var btnRC2: Button
+    private lateinit var btnLC1: Button
+    private lateinit var btnRC1: Button
+    private lateinit var btnLV: Button
+    private lateinit var btnRV: Button
     private lateinit var btnArrival: Button
     private lateinit var btnStop: Button
 
@@ -61,22 +59,18 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         super.onViewCreated(view, savedInstanceState)
 
         textStatus = view.findViewById(R.id.textStatus)
-
         btnConnect = view.findViewById(R.id.btnConnect)
-        btnLeft = view.findViewById(R.id.btnLeft)
-        btnRight = view.findViewById(R.id.btnRight)
 
-        btnL25 = view.findViewById(R.id.btnL25)
-        btnR25 = view.findViewById(R.id.btnR25)
-        btnLC50 = view.findViewById(R.id.btnLC50)
-        btnLC25 = view.findViewById(R.id.btnLC25)
-        btnRC50 = view.findViewById(R.id.btnRC50)
-        btnRC25 = view.findViewById(R.id.btnRC25)
+        btnLC2 = view.findViewById(R.id.btnLC2)
+        btnRC2 = view.findViewById(R.id.btnRC2)
+        btnLC1 = view.findViewById(R.id.btnLC1)
+        btnRC1 = view.findViewById(R.id.btnRC1)
+        btnLV = view.findViewById(R.id.btnLV)
+        btnRV = view.findViewById(R.id.btnRV)
         btnArrival = view.findViewById(R.id.btnArrival)
         btnStop = view.findViewById(R.id.btnStop)
 
         setAllCommandButtonsEnabled(false)
-
         setStatus("기기 연결 안됨 ✖")
 
         BluetoothManager.attachListener(this)
@@ -89,45 +83,14 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
             }
         }
 
-        btnLeft.setOnClickListener {
-            sendCommand("L")
-        }
-
-        btnRight.setOnClickListener {
-            sendCommand("R")
-        }
-
-        btnL25.setOnClickListener {
-            sendCommand("L25")
-        }
-
-        btnR25.setOnClickListener {
-            sendCommand("R25")
-        }
-
-        btnLC50.setOnClickListener {
-            sendCommand("LC50")
-        }
-
-        btnLC25.setOnClickListener {
-            sendCommand("LC25")
-        }
-
-        btnRC50.setOnClickListener {
-            sendCommand("RC50")
-        }
-
-        btnRC25.setOnClickListener {
-            sendCommand("RC25")
-        }
-
-        btnArrival.setOnClickListener {
-            sendCommand("A")
-        }
-
-        btnStop.setOnClickListener {
-            sendCommand("S")
-        }
+        btnLC2.setOnClickListener { sendCommand("LC2") }
+        btnRC2.setOnClickListener { sendCommand("RC2") }
+        btnLC1.setOnClickListener { sendCommand("LC1") }
+        btnRC1.setOnClickListener { sendCommand("RC1") }
+        btnLV.setOnClickListener { sendCommand("LV") }
+        btnRV.setOnClickListener { sendCommand("RV") }
+        btnArrival.setOnClickListener { sendCommand("A") }
+        btnStop.setOnClickListener { sendCommand("S") }
     }
 
     private fun sendCommand(command: String) {
@@ -146,15 +109,12 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
     }
 
     private fun setAllCommandButtonsEnabled(enabled: Boolean) {
-        btnLeft.isEnabled = enabled
-        btnRight.isEnabled = enabled
-
-        btnL25.isEnabled = enabled
-        btnR25.isEnabled = enabled
-        btnLC50.isEnabled = enabled
-        btnLC25.isEnabled = enabled
-        btnRC50.isEnabled = enabled
-        btnRC25.isEnabled = enabled
+        btnLC2.isEnabled = enabled
+        btnRC2.isEnabled = enabled
+        btnLC1.isEnabled = enabled
+        btnRC1.isEnabled = enabled
+        btnLV.isEnabled = enabled
+        btnRV.isEnabled = enabled
         btnArrival.isEnabled = enabled
         btnStop.isEnabled = enabled
     }
@@ -163,57 +123,27 @@ class DeviceFragment : Fragment(), BluetoothManager.Listener {
         val needs = mutableListOf<String>()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (
-                ContextCompat.checkSelfPermission(
-                    requireContext(),
-                    Manifest.permission.BLUETOOTH_SCAN
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
                 needs += Manifest.permission.BLUETOOTH_SCAN
             }
 
-            if (
-                ContextCompat.checkSelfPermission(
-                    requireContext(),
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 needs += Manifest.permission.BLUETOOTH_CONNECT
             }
 
-            if (
-                ContextCompat.checkSelfPermission(
-                    requireContext(),
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 needs += Manifest.permission.ACCESS_FINE_LOCATION
             }
 
-            if (
-                ContextCompat.checkSelfPermission(
-                    requireContext(),
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 needs += Manifest.permission.ACCESS_COARSE_LOCATION
             }
         } else {
-            if (
-                ContextCompat.checkSelfPermission(
-                    requireContext(),
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 needs += Manifest.permission.ACCESS_FINE_LOCATION
             }
 
-            if (
-                ContextCompat.checkSelfPermission(
-                    requireContext(),
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 needs += Manifest.permission.ACCESS_COARSE_LOCATION
             }
         }
